@@ -1,0 +1,141 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Versions
+        run: |
+          mkdir -p ci
+          flutter --version 2>&1 | tee ci/versions.log
+          echo "run=${{ github.run_number }} sha=${{ github.sha }}" >> ci/versions.log
+
+      - name: Android scaffolding (flutter create)
+        run: |
+          set -euo pipefail
+          if [ ! -d android ]; then
+            tmp="$(mktemp -d)"
+            flutter create --org ir.sivan --project-name taraz --platforms android --no-pub "$tmp/taraz" >/dev/null
+            cp -r "$tmp/taraz/android" ./android
+          fi
+          python3 tools/patch_android.py 2>&1 | tee ci/patch.log
+
+      - name: Keystore
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: bash tools/keystore.sh 2>&1 | tee ci/keystore.log
+
+      - name: Dependencies
+        run: |
+          set -o pipefail
+          flutter pub get 2>&1 | tee ci/pub.log
+          flutter pub deps --style=compact 2>&1 | grep -E "^(- |\\* )|^[a-z_]+ [0-9]" | head -80 > ci/deps.log || true
+
+      - name: Launcher icons
+        run: dart run flutter_launcher_icons 2>&1 | tee ci/icons.log || true
+
+      - name: Auto-fix & analyze
+        run: |
+          dart fix --apply 2>&1 | tail -20 | tee ci/fix.log || true
+          flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee ci/analyze.log || true
+
+      - name: Tests (incl. screenshots)
+        continue-on-error: true
+        run: |
+          mkdir -p ci/screens
+          flutter test 2>&1 | tee ci/test.log || true
+
+      - name: Build release APK
+        id: build
+        run: |
+          set -o pipefail
+          flutter build apk --release 2>&1 | tee ci/build.log
+
+      - name: Collect APK
+        if: success()
+        run: |
+          set -euo pipefail
+          V="1.0.${{ github.run_number }}"
+          cp build/app/outputs/flutter-apk/app-release.apk "taraz-v$V.apk"
+          ls -la taraz-v$V.apk
+          echo "APK_NAME=taraz-v$V.apk" >> "$GITHUB_ENV"
+          echo "TAG=v$V" >> "$GITHUB_ENV"
+
+      - name: Upload APK artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: taraz-apk
+          path: taraz-v*.apk
+          retention-days: 30
+
+      - name: Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: تراز ${{ env.TAG }}
+          body: |
+            فایل نصبی اندروید اپ «تراز» — ساخت شمارهٔ ${{ github.run_number }}.
+            فایل `${{ env.APK_NAME }}` را روی گوشی اندروید دانلود و نصب کنید (نصب از منابع ناشناس را اجازه بدهید).
+          files: ${{ env.APK_NAME }}
+          make_latest: true
+
+      - name: Publish logs & screenshots to repo
+        if: always()
+        env:
+          RESULT: ${{ steps.build.outcome }}
+        run: |
+          set -euo pipefail
+          mkdir -p ci
+          cat > ci/status.json <<EOF
+          {"run": ${{ github.run_number }}, "sha": "${{ github.sha }}", "result": "$RESULT", "tag": "${TAG:-}", "apk": "${APK_NAME:-}", "time": "$(date -u +%FT%TZ)"}
+          EOF
+          git config user.name "taraz-ci"
+          git config user.email "ci@users.noreply.github.com"
+          # فایل‌هایی که نباید در مخزن باشند (مثلاً یادداشت رمز) حذف می‌شوند
+          git rm -q --cached --ignore-unmatch -- "رمز-امضا-keystore.txt" "رمزها" 2>/dev/null || true
+          rm -rf -- "رمز-امضا-keystore.txt" "رمزها" 2>/dev/null || true
+          git add -A ci keystore 2>/dev/null || git add -A ci
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+          else
+            git commit -m "ci: build #${{ github.run_number }} ($RESULT) [skip ci]" >/dev/null
+            for i in 1 2 3 4; do
+              if git push origin HEAD:${{ github.ref_name }}; then break; fi
+              git pull --rebase origin ${{ github.ref_name }} || true
+              sleep 3
+            done
+          fi
