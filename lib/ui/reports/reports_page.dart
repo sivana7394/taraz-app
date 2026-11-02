@@ -58,9 +58,9 @@ class _ReportsPageState extends State<ReportsPage> {
             children: [
               Expanded(child: StatTile(label: 'جمع بازه', value: fmtCompact(st.total, unit: s.unit), icon: Icons.functions, caption: '${faDigits(st.count)} هزینه')),
               const SizedBox(width: 8),
-              Expanded(child: StatTile(label: 'میانگین هر هزینه', value: st.count == 0 ? '—' : fmtCompact(st.total ~/ st.count, unit: s.unit), icon: Icons.stacked_line_chart, color: Palette.amber)),
+              Expanded(child: StatTile(label: 'میانگین', value: st.count == 0 ? '—' : fmtCompact(st.total ~/ st.count, unit: s.unit), icon: Icons.stacked_line_chart, color: Palette.amber, caption: 'هر هزینه')),
               const SizedBox(width: 8),
-              Expanded(child: StatTile(label: 'بزرگ‌ترین هزینه', value: fmtCompact(st.maxEntry, unit: s.unit), icon: Icons.north_east, color: Palette.negative)),
+              Expanded(child: StatTile(label: 'بزرگ‌ترین', value: fmtCompact(st.maxEntry, unit: s.unit), icon: Icons.north_east, color: Palette.negative, caption: 'یک هزینه')),
             ],
           ),
           const SizedBox(height: 14),

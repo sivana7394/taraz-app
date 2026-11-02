@@ -175,21 +175,27 @@ class AppState extends ChangeNotifier {
   }
 
   Future<FirebaseFirestore> _initFirebase(FirebaseConn c) async {
-    final name = 'taraz-${c.projectId}';
+    final opts = FirebaseOptions(
+      apiKey: c.apiKey,
+      appId: c.appId,
+      messagingSenderId: c.messagingSenderId,
+      projectId: c.projectId,
+    );
+    // افزونهٔ Firestore همیشه به وجود اپ پیش‌فرض ([DEFAULT]) نیاز دارد؛ پس اول آن را می‌سازیم.
     FirebaseApp app;
-    final existing = Firebase.apps.where((a) => a.name == name).toList();
-    if (existing.isNotEmpty) {
-      app = existing.first;
+    final hasDefault = Firebase.apps.any((a) => a.name == defaultFirebaseAppName);
+    if (!hasDefault) {
+      app = await Firebase.initializeApp(options: opts);
     } else {
-      app = await Firebase.initializeApp(
-        name: name,
-        options: FirebaseOptions(
-          apiKey: c.apiKey,
-          appId: c.appId,
-          messagingSenderId: c.messagingSenderId,
-          projectId: c.projectId,
-        ),
-      );
+      final def = Firebase.app();
+      if (def.options.projectId == c.projectId && def.options.apiKey == c.apiKey) {
+        app = def;
+      } else {
+        // اتصال به پروژه‌ای دیگر در همین اجرا: اپ نام‌دار جداگانه
+        final name = 'taraz-${c.projectId}';
+        final existing = Firebase.apps.where((a) => a.name == name).toList();
+        app = existing.isNotEmpty ? existing.first : await Firebase.initializeApp(name: name, options: opts);
+      }
     }
     final db = FirebaseFirestore.instanceFor(app: app);
     try {

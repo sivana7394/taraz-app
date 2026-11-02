@@ -272,7 +272,8 @@ class _Column extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const labelH = 20.0, valueH = 18.0;
-    final barArea = height - labelH - valueH - 6;
+    // ۶ = فاصله‌های ثابت ستون، ۲ = فاصلهٔ بین دو بخش میله
+    final barArea = height - labelH - valueH - 6 - 2;
     final total = bucket.total;
     final frac = maxV == 0 ? 0.0 : total / maxV;
     final h = barArea * frac * progress;
@@ -400,12 +401,18 @@ class StatTile extends StatelessWidget {
           Row(
             children: [
               if (icon != null) ...[Icon(icon, size: 16, color: c), const SizedBox(width: 6)],
-              Expanded(child: Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis)),
+              Expanded(child: Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis)),
             ],
           ),
           const SizedBox(height: 6),
-          Text(value, style: amountStyle(context, size: 17), maxLines: 1, overflow: TextOverflow.ellipsis),
-          if (caption != null) Text(caption!, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(value, style: amountStyle(context, size: 17), maxLines: 1),
+            ),
+          ),
+          if (caption != null) Text(caption!, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis),
         ],
       ),
     );
