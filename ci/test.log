@@ -1,0 +1,27 @@
+
+::group::✅ Passing tests
+✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: فرمت فارسی ارقام و جداکننده
+✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: فرمت فارسی عدد به حروف
+✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: فرمت فارسی خلاصهٔ مبلغ
+✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: فرمت فارسی تاریخ شمسی
+✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: تنظیمات Firebase خواندن firebaseConfig وب
+✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: تنظیمات Firebase خواندن google-services.json
+✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: تنظیمات Firebase کد دعوت رفت‌وبرگشت
+✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: محاسبهٔ تراز ۵۰/۵۰ بدون تسویه
+✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: محاسبهٔ تراز با تسویه
+✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: محاسبهٔ تراز سهم نابرابر ۴/۲ دانگ
+✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: محاسبهٔ تراز بازهٔ ماه و سطل‌های ماهانه
+test/screens_test.dart:37:42: Error: 'RenderRepaintBoundary' isn't a type.
+    final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(const Key('shot')));
+                                         ^^^^^^^^^^^^^^^^^^^^^
+::endgroup::
+::group::❌ loading /home/runner/work/taraz-app/taraz-app/test/screens_test.dart (failed)
+Failed to load "/home/runner/work/taraz-app/taraz-app/test/screens_test.dart":
+Compilation failed for testPath=/home/runner/work/taraz-app/taraz-app/test/screens_test.dart: test/screens_test.dart:37:42: Error: 'RenderRepaintBoundary' isn't a type.
+    final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(const Key('shot')));
+                                         ^^^^^^^^^^^^^^^^^^^^^
+.
+
+::endgroup::
+
+::error::11 tests passed, 1 failed.

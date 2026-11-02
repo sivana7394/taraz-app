@@ -1,0 +1,80 @@
+taraz 1.0.0+1
+- cloud_firestore 7.1.0 [cloud_firestore_platform_interface cloud_firestore_web collection firebase_core firebase_core_platform_interface flutter meta]
+- crypto 3.0.8
+- firebase_core 5.1.0 [firebase_core_platform_interface firebase_core_web flutter meta]
+- flutter 0.0.0 [characters collection material_color_utilities meta vector_math sky_engine]
+- flutter_localizations 0.0.0 [flutter intl path]
+- image 4.12.0 [archive]
+- image_picker 1.2.4 [flutter image_picker_android image_picker_for_web image_picker_ios image_picker_linux image_picker_macos image_picker_platform_interface image_picker_windows]
+- path_provider 2.1.6 [flutter path_provider_android path_provider_foundation path_provider_linux path_provider_platform_interface path_provider_windows]
+- pdf 3.13.1 [archive barcode bidi crypto image meta path_parsing vector_math xml]
+- provider 6.1.5+1 [collection flutter nested]
+- shamsi_date 1.1.1
+- share_plus 13.3.1 [cross_file meta mime flutter flutter_web_plugins share_plus_platform_interface file url_launcher_web url_launcher_windows url_launcher_linux url_launcher_platform_interface ffi web win32]
+- shared_preferences 2.5.6 [flutter shared_preferences_android shared_preferences_foundation shared_preferences_linux shared_preferences_platform_interface shared_preferences_web shared_preferences_windows]
+- flutter_launcher_icons 0.14.4 [args checked_yaml cli_util image json_annotation path yaml]
+- flutter_lints 6.0.0 [lints]
+- flutter_test 0.0.0 [flutter test_api matcher path fake_async clock stack_trace vector_math leak_tracker_flutter_testing collection meta stream_channel]
+- _flutterfire_internals 1.3.79 [collection firebase_core firebase_core_platform_interface flutter meta]
+- archive 4.6.0 [path posix]
+- args 2.7.0
+- async 2.13.1 [collection meta]
+- barcode 2.2.9 [meta qr]
+- bidi 2.0.13
+- boolean_selector 2.1.2 [source_span string_scanner]
+- characters 1.4.1
+- checked_yaml 2.0.4 [json_annotation source_span yaml]
+- cli_util 0.4.2 [meta path]
+- clock 1.1.3
+- cloud_firestore_platform_interface 8.1.0 [_flutterfire_internals collection firebase_core flutter meta plugin_platform_interface]
+- cloud_firestore_web 5.8.0 [_flutterfire_internals cloud_firestore_platform_interface collection firebase_core firebase_core_web flutter flutter_web_plugins]
+- code_assets 2.1.0 [collection hooks logging]
+- collection 1.19.1
+- cross_file 0.3.5+5 [meta web]
+- fake_async 1.3.3 [clock collection]
+- ffi 2.2.0
+- ffi_leak_tracker 0.1.2 [ffi]
+- file 7.0.1 [meta path]
+- file_selector_linux 0.9.4+1 [cross_file file_selector_platform_interface flutter meta]
+- file_selector_macos 0.9.5+2 [cross_file file_selector_platform_interface flutter meta]
+- file_selector_platform_interface 2.7.0 [cross_file flutter http plugin_platform_interface]
+- file_selector_windows 0.9.3+6 [cross_file file_selector_platform_interface flutter meta]
+- firebase_core_platform_interface 8.1.1 [collection flutter meta plugin_platform_interface]
+- firebase_core_web 4.1.0 [firebase_core_platform_interface meta web]
+- fixnum 1.1.1
+- flutter_plugin_android_lifecycle 2.0.35 [flutter]
+- flutter_web_plugins 0.0.0 [flutter]
+- hooks 2.2.0 [collection crypto logging pub_semver record_use yaml]
+- http 1.6.0 [async http_parser meta web]
+- http_parser 4.1.2 [collection source_span string_scanner typed_data]
+- image_picker_android 0.8.13+25 [flutter flutter_plugin_android_lifecycle image_picker_platform_interface meta]
+- image_picker_for_web 3.1.1 [flutter flutter_web_plugins image_picker_platform_interface mime web]
+- image_picker_ios 0.8.13+14 [flutter image_picker_platform_interface meta]
+- image_picker_linux 0.2.2 [file_selector_linux file_selector_platform_interface flutter image_picker_platform_interface]
+- image_picker_macos 0.2.2+1 [file_selector_macos file_selector_platform_interface flutter image_picker_platform_interface]
+- image_picker_platform_interface 2.11.2 [cross_file flutter http plugin_platform_interface]
+- image_picker_windows 0.2.2 [file_selector_platform_interface file_selector_windows flutter image_picker_platform_interface]
+- intl 0.20.3 [clock meta path]
+- jni 1.1.1 [args collection ffi jni_util meta package_config path plugin_platform_interface]
+- jni_flutter 1.0.4+1 [flutter jni]
+- jni_util 1.0.0 [path]
+- json_annotation 4.12.0 [meta]
+- leak_tracker 11.0.2 [clock collection meta path vm_service]
+- leak_tracker_flutter_testing 3.0.10 [flutter leak_tracker leak_tracker_testing matcher meta]
+- leak_tracker_testing 3.0.2 [leak_tracker matcher meta]
+- lints 6.1.0
+- logging 1.3.0
+- matcher 0.12.20 [async meta stack_trace term_glyph test_api]
+- material_color_utilities 0.13.0 [collection]
+- meta 1.19.0
+- mime 2.1.0
+- nested 1.0.0 [flutter]
+- objective_c 9.6.2 [code_assets collection ffi hooks logging meta pub_semver]
+- package_config 3.0.0 [meta]
+- path 1.9.1
+- path_parsing 1.1.0 [meta vector_math]
+- path_provider_android 2.3.1 [flutter jni jni_flutter path_provider_platform_interface]
+- path_provider_foundation 2.6.0 [ffi flutter objective_c path_provider_platform_interface]
+- path_provider_linux 2.2.2 [ffi flutter path path_provider_platform_interface xdg_directories]
+- path_provider_platform_interface 2.1.3 [flutter platform plugin_platform_interface]
+- path_provider_windows 2.3.0 [ffi flutter path path_provider_platform_interface]

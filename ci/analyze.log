@@ -1,0 +1,6 @@
+Analyzing taraz-app...                                          
+
+warning • The declaration '_arDigits' isn't referenced. Try removing the declaration of '_arDigits' • lib/core/fa.dart:5:7 • unused_element
+  error • The name 'RenderRepaintBoundary' isn't a type, so it can't be used as a type argument. Try correcting the name to an existing type, or defining a type named 'RenderRepaintBoundary' • test/screens_test.dart:37:42 • non_type_as_type_argument
+
+2 issues found. (ran in 11.2s)

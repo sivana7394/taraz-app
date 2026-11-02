@@ -1,0 +1,19 @@
+Computing fixes in taraz-app...
+Applying fixes...
+
+lib/core/images.dart
+  unnecessary_import - 1 fix
+
+lib/core/theme.dart
+  undefined_function - 1 fix
+
+lib/data/app_state.dart
+  unnecessary_import - 1 fix
+
+lib/data/repo.dart
+  unnecessary_import - 1 fix
+
+lib/ui/entries/entry_editor.dart
+  unnecessary_import - 1 fix
+
+5 fixes made in 5 files.
