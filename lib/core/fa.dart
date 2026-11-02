@@ -2,7 +2,6 @@
 import 'package:shamsi_date/shamsi_date.dart';
 
 const _faDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-const _arDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
 
 /// تبدیل همهٔ ارقام لاتین (و عربی) به فارسی.
 String faDigits(Object value) {
