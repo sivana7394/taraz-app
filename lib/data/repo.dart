@@ -21,14 +21,27 @@ abstract class Repo {
   Stream<RoomConfig?> room();
   Stream<ListSnap<Entry>> entries();
   Stream<ListSnap<Settlement>> settlements();
+  Stream<ListSnap<InboxItem>> inbox();
 
   String newId();
-  Future<void> upsertEntry(Entry e, {Uint8List? receipt, bool receiptChanged = false});
-  Future<void> deleteEntry(String id);
-  Future<Uint8List?> getReceipt(String entryId);
+
+  /// ذخیرهٔ هزینه. [newReceipts] تصویر کامل پیوست‌های تازه (کلید = شناسهٔ پیوست)؛
+  /// [removedReceiptIds] پیوست‌های حذف‌شده؛ [consumeInboxId] رسیدِ صندوق که به این هزینه تبدیل شده.
+  Future<void> upsertEntry(
+    Entry e, {
+    Map<String, Uint8List> newReceipts = const {},
+    List<String> removedReceiptIds = const [],
+    String? consumeInboxId,
+  });
+  Future<void> deleteEntry(Entry e);
+  Future<Uint8List?> getReceipt(String attachmentId);
   Future<void> upsertSettlement(Settlement s);
   Future<void> deleteSettlement(String id);
   Future<void> saveRoom(RoomConfig c, {bool create = false});
+
+  Future<void> addInbox(InboxItem item, Uint8List full);
+  Future<void> deleteInbox(String id);
+
   bool get isDemo;
   void dispose();
 }
@@ -102,55 +115,114 @@ class FirestoreRepo implements Repo {
         return ListSnap(items, fromCache: q.metadata.isFromCache, pendingCount: pending);
       });
 
+  @override
+  Stream<ListSnap<InboxItem>> inbox() => _room
+          .collection('inbox')
+          .orderBy('createdAt', descending: true)
+          .snapshots(includeMetadataChanges: true)
+          .map((q) {
+        var pending = 0;
+        final items = <InboxItem>[];
+        for (final d in q.docs) {
+          final m = d.data();
+          if (d.metadata.hasPendingWrites) pending++;
+          items.add(InboxItem(
+            id: d.id,
+            thumb: (m['thumb'] as Blob?)?.bytes,
+            createdAt: _dt(m['createdAt']) ?? DateTime.now(),
+            createdBy: (m['createdBy'] as String?) ?? '',
+            note: (m['note'] as String?) ?? '',
+            pending: d.metadata.hasPendingWrites,
+          ));
+        }
+        return ListSnap(items, fromCache: q.metadata.isFromCache, pendingCount: pending);
+      });
+
   static DateTime? _dt(Object? v) => v is Timestamp ? v.toDate() : null;
 
-  Entry _entryFrom(String id, Map<String, dynamic> m, bool pending) => Entry(
-        id: id,
-        side: SideX.fromKey(m['side'] as String?),
-        amount: (m['amount'] as num?)?.toInt() ?? 0,
-        title: (m['title'] as String?) ?? '',
-        category: (m['category'] as String?) ?? 'misc',
-        paidAt: _dt(m['paidAt']) ?? DateTime.now(),
-        note: (m['note'] as String?) ?? '',
-        method: PayMethodX.fromKey(m['method'] as String?),
-        hasReceipt: (m['hasReceipt'] as bool?) ?? false,
-        thumb: (m['thumb'] as Blob?)?.bytes,
-        createdAt: _dt(m['createdAt']) ?? DateTime.now(),
-        updatedAt: _dt(m['updatedAt']),
-        pending: pending,
-      );
+  Entry _entryFrom(String id, Map<String, dynamic> m, bool pending) {
+    var attachments = <Attachment>[];
+    final raw = m['attachments'];
+    if (raw is List) {
+      for (final a in raw) {
+        if (a is Map) {
+          attachments.add(Attachment(
+            id: (a['id'] as String?) ?? id,
+            label: (a['label'] as String?) ?? 'رسید خرید',
+            thumb: (a['thumb'] as Blob?)?.bytes,
+          ));
+        }
+      }
+    } else if ((m['hasReceipt'] as bool?) ?? false) {
+      // سازگاری با نسخهٔ قبل: یک رسید با شناسهٔ خودِ هزینه
+      attachments = [Attachment(id: id, label: 'رسید خرید', thumb: (m['thumb'] as Blob?)?.bytes)];
+    }
+    final side = SideX.fromKey(m['side'] as String?);
+    return Entry(
+      id: id,
+      side: side,
+      buyer: m['buyer'] == null ? side : SideX.fromKey(m['buyer'] as String?),
+      amount: (m['amount'] as num?)?.toInt() ?? 0,
+      adjustedAmount: (m['adjustedAmount'] as num?)?.toInt(),
+      title: (m['title'] as String?) ?? '',
+      category: (m['category'] as String?) ?? 'misc',
+      paidAt: _dt(m['paidAt']) ?? DateTime.now(),
+      note: (m['note'] as String?) ?? '',
+      method: PayMethodX.fromKey(m['method'] as String?),
+      attachments: attachments,
+      createdAt: _dt(m['createdAt']) ?? DateTime.now(),
+      updatedAt: _dt(m['updatedAt']),
+      createdBy: (m['createdBy'] as String?) ?? '',
+      pending: pending,
+    );
+  }
 
   @override
-  Future<void> upsertEntry(Entry e, {Uint8List? receipt, bool receiptChanged = false}) async {
+  Future<void> upsertEntry(
+    Entry e, {
+    Map<String, Uint8List> newReceipts = const {},
+    List<String> removedReceiptIds = const [],
+    String? consumeInboxId,
+  }) async {
     final batch = db.batch();
     final data = <String, dynamic>{
       'side': e.side.key,
+      'buyer': e.buyer.key,
       'amount': e.amount,
+      'adjustedAmount': e.adjustedAmount,
       'title': e.title,
       'category': e.category,
       'paidAt': Timestamp.fromDate(e.paidAt),
       'note': e.note,
       'method': e.method.key,
-      'hasReceipt': e.hasReceipt,
+      'attachments': [
+        for (final a in e.attachments)
+          {'id': a.id, 'label': a.label, 'thumb': a.thumb == null ? null : Blob(a.thumb!)},
+      ],
+      // سازگاری با نسخهٔ قبل
+      'hasReceipt': e.attachments.isNotEmpty,
       'thumb': e.thumb == null ? null : Blob(e.thumb!),
       'createdAt': Timestamp.fromDate(e.createdAt),
+      'createdBy': e.createdBy,
       'updatedAt': Timestamp.fromDate(DateTime.now()),
       'deleted': false,
     };
     batch.set(_room.collection('entries').doc(e.id), data, SetOptions(merge: true));
-    if (receiptChanged) {
-      final ref = _room.collection('receipts').doc(e.id);
-      if (receipt != null) {
-        _receiptCache[e.id] = receipt;
-        batch.set(ref, {
-          'data': Blob(receipt),
-          'size': receipt.length,
-          'updatedAt': Timestamp.fromDate(DateTime.now()),
-        });
-      } else {
-        _receiptCache.remove(e.id);
-        batch.delete(ref);
-      }
+    for (final kv in newReceipts.entries) {
+      _receiptCache[kv.key] = kv.value;
+      batch.set(_room.collection('receipts').doc(kv.key), {
+        'data': Blob(kv.value),
+        'size': kv.value.length,
+        'entryId': e.id,
+        'updatedAt': Timestamp.fromDate(DateTime.now()),
+      });
+    }
+    for (final id in removedReceiptIds) {
+      _receiptCache.remove(id);
+      batch.delete(_room.collection('receipts').doc(id));
+    }
+    if (consumeInboxId != null) {
+      batch.delete(_room.collection('inbox').doc(consumeInboxId));
     }
     // منتظر تأیید سرور نمی‌مانیم: در حالت آفلاین در صف می‌ماند و بعداً ارسال می‌شود.
     unawaited(batch.commit().catchError((Object err) {
@@ -159,24 +231,26 @@ class FirestoreRepo implements Repo {
   }
 
   @override
-  Future<void> deleteEntry(String id) async {
+  Future<void> deleteEntry(Entry e) async {
     final batch = db.batch();
-    batch.set(_room.collection('entries').doc(id), {
+    batch.set(_room.collection('entries').doc(e.id), {
       'deleted': true,
       'updatedAt': Timestamp.fromDate(DateTime.now()),
     }, SetOptions(merge: true));
-    batch.delete(_room.collection('receipts').doc(id));
-    _receiptCache.remove(id);
+    for (final a in e.attachments) {
+      batch.delete(_room.collection('receipts').doc(a.id));
+      _receiptCache.remove(a.id);
+    }
     unawaited(batch.commit().catchError((Object err) {
       debugPrint('deleteEntry failed: $err');
     }));
   }
 
   @override
-  Future<Uint8List?> getReceipt(String entryId) async {
-    final cached = _receiptCache[entryId];
+  Future<Uint8List?> getReceipt(String attachmentId) async {
+    final cached = _receiptCache[attachmentId];
     if (cached != null) return cached;
-    final ref = _room.collection('receipts').doc(entryId);
+    final ref = _room.collection('receipts').doc(attachmentId);
     Uint8List? bytes;
     try {
       final c = await ref.get(const GetOptions(source: Source.cache));
@@ -190,7 +264,7 @@ class FirestoreRepo implements Repo {
     }
     if (bytes != null) {
       if (_receiptCache.length > 24) _receiptCache.remove(_receiptCache.keys.first);
-      _receiptCache[entryId] = bytes;
+      _receiptCache[attachmentId] = bytes;
     }
     return bytes;
   }
@@ -231,6 +305,38 @@ class FirestoreRepo implements Repo {
     }));
   }
 
+  @override
+  Future<void> addInbox(InboxItem item, Uint8List full) async {
+    _receiptCache[item.id] = full;
+    final batch = db.batch();
+    batch.set(_room.collection('inbox').doc(item.id), {
+      'thumb': item.thumb == null ? null : Blob(item.thumb!),
+      'createdAt': Timestamp.fromDate(item.createdAt),
+      'createdBy': item.createdBy,
+      'note': item.note,
+    });
+    batch.set(_room.collection('receipts').doc(item.id), {
+      'data': Blob(full),
+      'size': full.length,
+      'inbox': true,
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
+    });
+    unawaited(batch.commit().catchError((Object err) {
+      debugPrint('addInbox failed: $err');
+    }));
+  }
+
+  @override
+  Future<void> deleteInbox(String id) async {
+    _receiptCache.remove(id);
+    final batch = db.batch();
+    batch.delete(_room.collection('inbox').doc(id));
+    batch.delete(_room.collection('receipts').doc(id));
+    unawaited(batch.commit().catchError((Object err) {
+      debugPrint('deleteInbox failed: $err');
+    }));
+  }
+
   /// بررسی اتصال واقعی به سرور (برای مرحلهٔ راه‌اندازی). خطا → پیام فارسی.
   Future<RoomConfig?> probe({Duration timeout = const Duration(seconds: 25)}) async {
     try {
@@ -240,7 +346,7 @@ class FirestoreRepo implements Repo {
       if (!s.exists) return null;
       return RoomConfig.fromMap(s.data());
     } on TimeoutException {
-      throw ConnError('پاسخی از سرور نرسید. اینترنت (و در صورت نیاز فیلترشکن) را بررسی کنید.');
+      throw const ConnError('پاسخی از سرور نرسید. اینترنت (و در صورت نیاز فیلترشکن) را بررسی کنید.');
     } on FirebaseException catch (e) {
       throw ConnError(_describe(e));
     }
@@ -300,13 +406,10 @@ class DemoRepo implements Repo {
     _seed();
   }
 
-  late final _room = _Subject<RoomConfig?>(const RoomConfig(
-    name: 'ساختمان نمونه — ۴ طبقه',
-    sideAName: 'من',
-    sideBName: 'شرکا',
-  ));
+  late final _room = _Subject<RoomConfig?>(const RoomConfig(name: 'ساختمان نمونه — ۴ طبقه'));
   late final _entries = _Subject<ListSnap<Entry>>(const ListSnap([]));
   late final _settlements = _Subject<ListSnap<Settlement>>(const ListSnap([]));
+  late final _inbox = _Subject<ListSnap<InboxItem>>(const ListSnap([]));
   final _receipts = <String, Uint8List>{};
   int _counter = 0;
 
@@ -366,26 +469,35 @@ class DemoRepo implements Repo {
       };
       final amount = (base / 100000).round() * 100000;
       final side = rnd.nextDouble() < 0.52 ? Side.a : Side.b;
+      final proxy = rnd.nextDouble() < 0.15;
+      final adjusted = daysAgo > 90 && rnd.nextDouble() < 0.5 ? (amount * (1.15 + rnd.nextDouble() * 0.3) / 100000).round() * 100000 : null;
       final hasReceipt = rnd.nextDouble() < 0.55;
       final id = 'seed-$i';
-      Uint8List? thumb;
+      final attachments = <Attachment>[];
       if (hasReceipt) {
         final full = demoReceipt(i);
         _receipts[id] = full;
-        thumb = full; // برای نمونه همان تصویر (کوچک است)
+        attachments.add(Attachment(id: id, label: 'رسید خرید', thumb: full));
+        if (proxy) {
+          final full2 = demoReceipt(i + 100);
+          _receipts['$id-2'] = full2;
+          attachments.add(Attachment(id: '$id-2', label: 'رسید واریز', thumb: full2));
+        }
       }
       list.add(Entry(
         id: id,
         side: side,
+        buyer: proxy ? side.other : side,
         amount: amount,
+        adjustedAmount: adjusted,
         title: t[rnd.nextInt(t.length)],
         category: cat,
         paidAt: paidAt,
         note: rnd.nextDouble() < 0.3 ? 'پرداخت به ${side == Side.a ? 'فروشنده' : 'پیمانکار'} — فاکتور شمارهٔ ${1000 + rnd.nextInt(9000)}' : '',
         method: PayMethod.values[rnd.nextInt(PayMethod.values.length)],
-        hasReceipt: hasReceipt,
-        thumb: thumb,
+        attachments: attachments,
         createdAt: paidAt.add(Duration(minutes: rnd.nextInt(90))),
+        createdBy: 'demo-${side.name}',
       ));
     }
     list.sort((x, y) => y.paidAt.compareTo(x.paidAt));
@@ -401,6 +513,13 @@ class DemoRepo implements Repo {
         createdAt: now.subtract(const Duration(days: 40)),
       ),
     ]);
+    final inboxItems = <InboxItem>[];
+    for (var i = 0; i < 2; i++) {
+      final full = demoReceipt(300 + i);
+      _receipts['inbox-$i'] = full;
+      inboxItems.add(InboxItem(id: 'inbox-$i', thumb: full, createdAt: now.subtract(Duration(hours: 3 * (i + 1))), createdBy: 'demo-a'));
+    }
+    _inbox.value = ListSnap(inboxItems);
   }
 
   @override
@@ -409,31 +528,40 @@ class DemoRepo implements Repo {
   Stream<ListSnap<Entry>> entries() => _entries.stream;
   @override
   Stream<ListSnap<Settlement>> settlements() => _settlements.stream;
+  @override
+  Stream<ListSnap<InboxItem>> inbox() => _inbox.stream;
 
   @override
-  Future<void> upsertEntry(Entry e, {Uint8List? receipt, bool receiptChanged = false}) async {
+  Future<void> upsertEntry(
+    Entry e, {
+    Map<String, Uint8List> newReceipts = const {},
+    List<String> removedReceiptIds = const [],
+    String? consumeInboxId,
+  }) async {
     final items = [..._entries.value.items.where((x) => x.id != e.id), e.copyWith(updatedAt: DateTime.now())];
     items.sort((x, y) => y.paidAt.compareTo(x.paidAt));
-    if (receiptChanged) {
-      if (receipt != null) {
-        _receipts[e.id] = receipt;
-      } else {
-        _receipts.remove(e.id);
-      }
+    _receipts.addAll(newReceipts);
+    for (final id in removedReceiptIds) {
+      _receipts.remove(id);
+    }
+    if (consumeInboxId != null) {
+      _inbox.value = ListSnap(_inbox.value.items.where((x) => x.id != consumeInboxId).toList());
     }
     _entries.value = ListSnap(items);
   }
 
   @override
-  Future<void> deleteEntry(String id) async {
-    _receipts.remove(id);
-    _entries.value = ListSnap(_entries.value.items.where((x) => x.id != id).toList());
+  Future<void> deleteEntry(Entry e) async {
+    for (final a in e.attachments) {
+      _receipts.remove(a.id);
+    }
+    _entries.value = ListSnap(_entries.value.items.where((x) => x.id != e.id).toList());
   }
 
   @override
-  Future<Uint8List?> getReceipt(String entryId) async {
+  Future<Uint8List?> getReceipt(String attachmentId) async {
     await Future<void>.delayed(const Duration(milliseconds: 150));
-    return _receipts[entryId];
+    return _receipts[attachmentId];
   }
 
   @override
@@ -454,9 +582,22 @@ class DemoRepo implements Repo {
   }
 
   @override
+  Future<void> addInbox(InboxItem item, Uint8List full) async {
+    _receipts[item.id] = full;
+    _inbox.value = ListSnap([item, ..._inbox.value.items]);
+  }
+
+  @override
+  Future<void> deleteInbox(String id) async {
+    _receipts.remove(id);
+    _inbox.value = ListSnap(_inbox.value.items.where((x) => x.id != id).toList());
+  }
+
+  @override
   void dispose() {
     _room.close();
     _entries.close();
     _settlements.close();
+    _inbox.close();
   }
 }

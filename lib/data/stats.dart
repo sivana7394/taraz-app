@@ -93,6 +93,11 @@ class Stats {
   final List<MonthBucket> byMonth;
   final int receiptsCount;
   final int maxEntry;
+  /// تعداد هزینه‌های تعدیل‌شده (معادل امروز) در بازه و اختلاف آن‌ها با مبلغ پرداختی
+  final int adjustedCount;
+  final int adjustmentDelta;
+  /// جمع پرداختی واقعی در بازه (بدون تعدیل)
+  final int paidTotal;
 
   // تراز کل (مستقل از بازه)
   final int allSpentA;
@@ -115,6 +120,9 @@ class Stats {
     required this.byMonth,
     required this.receiptsCount,
     required this.maxEntry,
+    required this.adjustedCount,
+    required this.adjustmentDelta,
+    required this.paidTotal,
     required this.allSpentA,
     required this.allSpentB,
     required this.transfersAB,
@@ -150,7 +158,7 @@ class Stats {
   }) {
     final n = now ?? DateTime.now();
     var total = 0, spentA = 0, spentB = 0, countA = 0, countB = 0, receipts = 0, maxEntry = 0;
-    var allA = 0, allB = 0;
+    var allA = 0, allB = 0, adjustedCount = 0, adjustmentDelta = 0, paidTotal = 0;
     final cat = <String, List<int>>{}; // key → [amount, count, a, b]
 
     // سطل‌های ماهانه: آخرین monthCount ماه شمسی تا «اکنون» (یا تا پایان بازه)
@@ -168,30 +176,36 @@ class Stats {
 
     for (final e in entries) {
       if (e.deleted) continue;
+      final v = e.effectiveAmount; // معادل امروز اگر ثبت شده باشد
       if (e.side == Side.a) {
-        allA += e.amount;
+        allA += v;
       } else {
-        allB += e.amount;
+        allB += v;
       }
       final mk = jMonthKey(e.paidAt);
       final bk = buckets[mk];
-      if (bk != null) bk[e.side == Side.a ? 0 : 1] += e.amount;
+      if (bk != null) bk[e.side == Side.a ? 0 : 1] += v;
 
       if (!period.contains(e.paidAt)) continue;
-      total += e.amount;
-      if (e.amount > maxEntry) maxEntry = e.amount;
+      total += v;
+      paidTotal += e.amount;
+      if (e.isAdjusted) {
+        adjustedCount++;
+        adjustmentDelta += v - e.amount;
+      }
+      if (v > maxEntry) maxEntry = v;
       if (e.hasReceipt) receipts++;
       if (e.side == Side.a) {
-        spentA += e.amount;
+        spentA += v;
         countA++;
       } else {
-        spentB += e.amount;
+        spentB += v;
         countB++;
       }
       final c = cat.putIfAbsent(e.category, () => [0, 0, 0, 0]);
-      c[0] += e.amount;
+      c[0] += v;
       c[1] += 1;
-      c[e.side == Side.a ? 2 : 3] += e.amount;
+      c[e.side == Side.a ? 2 : 3] += v;
     }
 
     var ab = 0, ba = 0;
@@ -227,6 +241,9 @@ class Stats {
       byMonth: byMonth,
       receiptsCount: receipts,
       maxEntry: maxEntry,
+      adjustedCount: adjustedCount,
+      adjustmentDelta: adjustmentDelta,
+      paidTotal: paidTotal,
       allSpentA: allA,
       allSpentB: allB,
       transfersAB: ab,
@@ -252,6 +269,9 @@ class Stats {
         final dir = ch >= 0 ? 'بیشتر' : 'کمتر';
         out.add('هزینهٔ ${byMonth.last.label} نسبت به ${byMonth[byMonth.length - 2].label} ${fmtPercent(ch.abs())} $dir بوده است.');
       }
+    }
+    if (adjustedCount > 0) {
+      out.add('${faDigits(adjustedCount)} هزینه با «معادل امروز» منظور شده؛ اختلاف با پرداختی واقعی: ${fmtMoney(adjustmentDelta, unit: unit)}.');
     }
     if (count > 0) {
       final uncovered = count - receiptsCount;

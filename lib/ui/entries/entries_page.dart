@@ -42,7 +42,7 @@ class EntriesFilter {
     }
     final q = enDigits(query.trim());
     if (q.isNotEmpty) {
-      final hay = enDigits('${e.title} ${e.note} ${categoryOf(e.category).label} ${e.amount}');
+      final hay = enDigits('${e.title} ${e.note} ${categoryOf(e.category).label} ${e.amount} ${e.effectiveAmount}');
       if (!hay.contains(q)) return false;
     }
     return true;
@@ -84,7 +84,7 @@ class _EntriesPageState extends State<EntriesPage> {
     final text = Theme.of(context).textTheme;
     final all = s.entries;
     final items = all.where(_filter.matches).toList();
-    final sum = items.fold<int>(0, (a, e) => a + e.amount);
+    final sum = items.fold<int>(0, (a, e) => a + e.effectiveAmount);
 
     // گروه‌بندی بر اساس روز
     final groups = <String, List<Entry>>{};
@@ -212,7 +212,7 @@ class _EntriesPageState extends State<EntriesPage> {
                       Text(relativeDay(groups[k]!.first.paidAt), style: text.titleSmall?.copyWith(color: scheme.primary)),
                       const Spacer(),
                       Text(
-                        fmtCompact(groups[k]!.fold<int>(0, (a, e) => a + e.amount), unit: s.unit),
+                        fmtCompact(groups[k]!.fold<int>(0, (a, e) => a + e.effectiveAmount), unit: s.unit),
                         style: text.labelMedium?.copyWith(color: scheme.onSurfaceVariant),
                       ),
                     ],
@@ -371,6 +371,14 @@ class EntryTile extends StatelessWidget {
                     Row(
                       children: [
                         SideBadge(entry.side, s.nameOf(entry.side), compact: true),
+                        if (entry.isProxy) ...[
+                          const SizedBox(width: 4),
+                          Tooltip(message: 'خرید توسط ${s.nameOf(entry.buyer)} (به نیابت)', child: Icon(Icons.swap_horiz, size: 14, color: Palette.side(entry.buyer))),
+                        ],
+                        if (entry.isAdjusted) ...[
+                          const SizedBox(width: 4),
+                          Tooltip(message: 'معادل امروز؛ پرداختی: ${fmtMoney(entry.amount, unit: s.unit)}', child: Icon(Icons.trending_up, size: 14, color: Palette.amber)),
+                        ],
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
@@ -389,7 +397,7 @@ class EntryTile extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(fmtMoney(entry.amount, unit: s.unit, withUnit: false), style: amountStyle(context, size: 16)),
+                  Text(fmtMoney(entry.effectiveAmount, unit: s.unit, withUnit: false), style: amountStyle(context, size: 16, color: entry.isAdjusted ? Palette.amber : null)),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

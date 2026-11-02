@@ -1,5 +1,6 @@
-// وضعیت کلی اپ: اتصال، نقش، داده‌های زنده و تنظیمات ظاهر.
+// وضعیت کلی اپ: اتصال، داده‌های زنده، صندوق رسیدها و تنظیمات ظاهر.
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,6 +9,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/fa.dart';
+import '../core/images.dart';
+import '../core/share_receiver.dart';
 import 'firebase_config.dart';
 import 'local_store.dart';
 import 'models.dart';
@@ -16,16 +19,24 @@ import 'stats.dart';
 
 enum AppPhase { setup, connecting, ready, error }
 
+/// درخواست‌های ناوبری که از بیرون می‌آیند (Share، میانبر آیکون، ساخت پروژه).
+enum PendingAction { none, openInbox, addExpense, addReceipt, showInvite }
+
 class AppState extends ChangeNotifier {
-  AppState(this.store, {Repo? repoOverride}) : _repoOverride = repoOverride {
+  AppState(this.store, {Repo? repoOverride, bool listenShares = true}) : _repoOverride = repoOverride {
     _themeMode = store.themeMode;
     _unit = store.unit;
-    _side = store.side ?? Side.a;
+    _defaultPayer = store.side ?? Side.a;
     _lastSeenOther = store.lastSeenOther;
+    if (listenShares) {
+      _shareSub = ShareReceiver.instance.stream.listen(_onShare);
+      ShareReceiver.instance.start();
+    }
   }
 
   final LocalStore store;
   final Repo? _repoOverride;
+  StreamSubscription<SharePayload>? _shareSub;
 
   // ---------------------------------------------------------------- وضعیت
   AppPhase _phase = AppPhase.setup;
@@ -37,14 +48,17 @@ class AppState extends ChangeNotifier {
   Repo? get repo => _repo;
   bool get isDemo => _repo?.isDemo ?? false;
 
-  /// پس از ساخت پروژهٔ جدید، صفحهٔ خانه یک بار برگهٔ کد دعوت را نشان می‌دهد.
-  bool pendingInvite = false;
+  /// کاری که صفحهٔ خانه باید پس از ساخته‌شدن انجام دهد.
+  PendingAction pendingAction = PendingAction.none;
+  /// شمارندهٔ درخواست‌ها (برای این‌که صفحهٔ خانه متوجه درخواست تازه شود).
+  int pendingActionSeq = 0;
 
   FirebaseConn? get conn => store.conn;
+  String get deviceId => store.deviceId;
 
-  Side _side = Side.a;
-  Side get side => _side;
-  Side get otherSide => _side.other;
+  Side _defaultPayer = Side.a;
+  /// پرداخت‌کنندهٔ پیش‌فرض در این گوشی (آخرین انتخاب).
+  Side get defaultPayer => _defaultPayer;
 
   ThemeMode _themeMode = ThemeMode.system;
   ThemeMode get themeMode => _themeMode;
@@ -60,6 +74,8 @@ class AppState extends ChangeNotifier {
   List<Entry> get entries => _entries;
   List<Settlement> _settlements = const [];
   List<Settlement> get settlements => _settlements;
+  List<InboxItem> _inbox = const [];
+  List<InboxItem> get inbox => _inbox;
 
   SyncStatus _sync = const SyncStatus(SyncState.connecting);
   SyncStatus get sync => _sync;
@@ -68,7 +84,12 @@ class AppState extends ChangeNotifier {
 
   DateTime? _lastSeenOther;
 
-  StreamSubscription? _subRoom, _subEntries, _subSettlements;
+  StreamSubscription? _subRoom, _subEntries, _subSettlements, _subInbox;
+
+  /// Share هایی که پیش از آماده‌شدن اتصال رسیده‌اند.
+  final List<String> _queuedSharePaths = [];
+  bool _ingesting = false;
+  bool get ingesting => _ingesting;
 
   Period _period = Period.thisMonth();
   Period get period => _period;
@@ -88,14 +109,13 @@ class AppState extends ChangeNotifier {
 
   /// نام کوتاه طرف‌ها برای نمایش.
   String nameOf(Side s) => _config.sideName(s);
-  String get myName => nameOf(_side);
-  String get otherName => nameOf(otherSide);
 
-  /// هزینه‌های تازهٔ طرف مقابل که هنوز دیده نشده‌اند.
+  /// هزینه‌های تازه‌ای که از گوشی دیگری ثبت شده و هنوز دیده نشده‌اند.
   int get unseenFromOther {
     final since = _lastSeenOther;
     if (since == null) return 0;
-    return _entries.where((e) => e.side == otherSide && e.createdAt.isAfter(since)).length;
+    final me = deviceId;
+    return _entries.where((e) => e.createdBy != me && e.createdAt.isAfter(since)).length;
   }
 
   Future<void> markSeen() async {
@@ -105,7 +125,6 @@ class AppState extends ChangeNotifier {
   }
 
   // ------------------------------------------------------------- راه‌اندازی
-  /// در شروع اپ: اگر اتصال یا حالت نمایشی ذخیره شده بود، وصل می‌شود.
   Future<void> boot() async {
     if (_repoOverride != null) {
       _attach(_repoOverride);
@@ -117,18 +136,16 @@ class AppState extends ChangeNotifier {
     }
     final c = store.conn;
     if (c != null && c.roomId.isNotEmpty) {
-      await connectWith(c, side: store.side ?? Side.a, probe: false);
+      await connectWith(c, probe: false);
     } else {
       _phase = AppPhase.setup;
       notifyListeners();
     }
   }
 
-  Future<void> startDemo(Side side) async {
+  Future<void> startDemo() async {
     await store.setDemo(true);
-    await store.setSide(side);
     await store.setOnboarded(true);
-    _side = side;
     _attach(DemoRepo());
   }
 
@@ -136,7 +153,6 @@ class AppState extends ChangeNotifier {
   /// در صورت خطا ConnError پرتاب می‌شود (اتصال ذخیره نمی‌شود).
   Future<void> connectWith(
     FirebaseConn c, {
-    required Side side,
     bool probe = true,
     RoomConfig? createRoom,
   }) async {
@@ -157,10 +173,8 @@ class AppState extends ChangeNotifier {
       }
       await store.setConn(c);
       await store.setDemo(false);
-      await store.setSide(side);
       await store.setOnboarded(true);
-      _side = side;
-      if (createRoom != null) pendingInvite = true;
+      if (createRoom != null) _request(PendingAction.showInvite);
       _attach(repo);
     } on ConnError {
       _phase = store.conn == null ? AppPhase.setup : AppPhase.error;
@@ -237,6 +251,17 @@ class AppState extends ChangeNotifier {
       _stats = null;
       notifyListeners();
     }, onError: _onStreamError);
+
+    _subInbox = repo.inbox().listen((snap) {
+      _inbox = snap.items;
+      notifyListeners();
+    }, onError: _onStreamError);
+
+    if (_queuedSharePaths.isNotEmpty) {
+      final q = [..._queuedSharePaths];
+      _queuedSharePaths.clear();
+      unawaited(ingestSharedFiles(q));
+    }
   }
 
   void _onStreamError(Object e) {
@@ -264,42 +289,118 @@ class AppState extends ChangeNotifier {
     _subRoom?.cancel();
     _subEntries?.cancel();
     _subSettlements?.cancel();
-    _subRoom = _subEntries = _subSettlements = null;
+    _subInbox?.cancel();
+    _subRoom = _subEntries = _subSettlements = _subInbox = null;
     _repo?.dispose();
     _repo = null;
   }
 
-  /// خروج از پروژه (اتصال و نقش محلی پاک می‌شود؛ داده‌های سرور دست‌نخورده می‌ماند).
+  /// خروج از پروژه (اتصال محلی پاک می‌شود؛ داده‌های سرور دست‌نخورده می‌ماند).
   Future<void> disconnect() async {
     _detach();
     await store.disconnect();
     _entries = const [];
     _settlements = const [];
+    _inbox = const [];
     _config = const RoomConfig();
     _stats = null;
     _phase = AppPhase.setup;
     notifyListeners();
   }
 
-  // ------------------------------------------------------------------ اعمال
-  Future<void> saveEntry(Entry e, {Uint8List? receipt, bool receiptChanged = false}) async {
+  // ------------------------------------------------------- Share / میانبرها
+  void _request(PendingAction a) {
+    pendingAction = a;
+    pendingActionSeq++;
+    notifyListeners();
+  }
+
+  /// صفحهٔ خانه پس از انجام، درخواست را مصرف می‌کند.
+  PendingAction takePendingAction() {
+    final a = pendingAction;
+    pendingAction = PendingAction.none;
+    return a;
+  }
+
+  void _onShare(SharePayload p) {
+    if (p.paths.isNotEmpty) {
+      if (_repo == null) {
+        _queuedSharePaths.addAll(p.paths);
+      } else {
+        unawaited(ingestSharedFiles(p.paths));
+      }
+    }
+    switch (p.shortcut) {
+      case 'add':
+        _request(PendingAction.addExpense);
+      case 'receipt':
+        _request(PendingAction.addReceipt);
+    }
+  }
+
+  /// تصاویر رسیده را فشرده می‌کند و در صندوق رسیدها می‌گذارد.
+  Future<void> ingestSharedFiles(List<String> paths) async {
+    final r = _repo;
+    if (r == null) return;
+    _ingesting = true;
+    notifyListeners();
+    var added = 0;
+    for (final p in paths) {
+      try {
+        final bytes = await File(p).readAsBytes();
+        await addInboxImage(bytes);
+        added++;
+      } catch (e) {
+        debugPrint('ingest failed for $p: $e');
+      }
+    }
+    _ingesting = false;
+    if (added > 0) _request(PendingAction.openInbox);
+    notifyListeners();
+  }
+
+  /// افزودن یک عکس (خام) به صندوق رسیدها.
+  Future<void> addInboxImage(Uint8List raw) async {
     final r = _repo;
     if (r == null) return;
     if (!_roomExists && !r.isDemo) {
       await r.saveRoom(_config, create: true);
       _roomExists = true;
     }
-    await r.upsertEntry(e, receipt: receipt, receiptChanged: receiptChanged);
+    final p = await processReceipt(raw);
+    final item = InboxItem(id: r.newId(), thumb: p.thumb, createdAt: DateTime.now(), createdBy: deviceId);
+    await r.addInbox(item, p.full);
   }
 
-  Future<void> deleteEntry(String id) async {
-    await _repo?.deleteEntry(id);
+  Future<void> deleteInbox(String id) async {
+    await _repo?.deleteInbox(id);
   }
 
-  Future<Uint8List?> getReceipt(String id) async {
+  // ------------------------------------------------------------------ اعمال
+  Future<void> saveEntry(
+    Entry e, {
+    Map<String, Uint8List> newReceipts = const {},
+    List<String> removedReceiptIds = const [],
+    String? consumeInboxId,
+  }) async {
+    final r = _repo;
+    if (r == null) return;
+    if (!_roomExists && !r.isDemo) {
+      await r.saveRoom(_config, create: true);
+      _roomExists = true;
+    }
+    await r.upsertEntry(e, newReceipts: newReceipts, removedReceiptIds: removedReceiptIds, consumeInboxId: consumeInboxId);
+    if (e.side != _defaultPayer) await setDefaultPayer(e.side);
+  }
+
+  Future<void> deleteEntry(Entry e) async {
+    await _repo?.deleteEntry(e);
+  }
+
+  Future<Uint8List?> getReceipt(String attachmentId) async {
     final r = _repo;
     if (r == null) return null;
-    return r.getReceipt(id);
+    return r.getReceipt(attachmentId);
   }
 
   Future<void> saveSettlement(Settlement s) async {
@@ -320,8 +421,6 @@ class AppState extends ChangeNotifier {
 
   String newId() => _repo?.newId() ?? DateTime.now().microsecondsSinceEpoch.toString();
 
-  bool canEdit(Entry e) => e.side == _side;
-
   // -------------------------------------------------------------- تنظیمات
   Future<void> setThemeMode(ThemeMode m) async {
     _themeMode = m;
@@ -335,8 +434,8 @@ class AppState extends ChangeNotifier {
     await store.setUnit(u);
   }
 
-  Future<void> setSide(Side s) async {
-    _side = s;
+  Future<void> setDefaultPayer(Side s) async {
+    _defaultPayer = s;
     notifyListeners();
     await store.setSide(s);
   }
@@ -352,6 +451,7 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _shareSub?.cancel();
     _detach();
     super.dispose();
   }
@@ -362,7 +462,7 @@ class FirestoreRepoErrors {
   static String describe(FirebaseException e) {
     switch (e.code) {
       case 'permission-denied':
-        return 'دسترسی به پایگاه‌داده رد شد؛ قوانین Firestore را بررسی کنید.';
+        return 'دسترسی به پایگاه‌داده رد شد؛ قوانین Firestore را بررسی کنید (نسخهٔ جدید قوانین در تنظیمات).';
       case 'unavailable':
         return 'سرور در دسترس نیست؛ از دادهٔ محلی استفاده می‌شود.';
       default:

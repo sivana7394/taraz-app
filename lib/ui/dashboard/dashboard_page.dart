@@ -9,6 +9,7 @@ import '../../data/models.dart';
 import '../../data/stats.dart';
 import '../entries/entries_page.dart';
 import '../entries/entry_editor.dart';
+import '../inbox/inbox_page.dart';
 import '../widgets/charts.dart';
 import '../widgets/common.dart';
 import 'settlement_sheet.dart';
@@ -45,11 +46,12 @@ class _DashboardPageState extends State<DashboardPage> {
               backgroundColor: Theme.of(context).scaffoldBackgroundColor,
               titleSpacing: 20,
               title: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(cfg.name, style: text.titleLarge, maxLines: 1, overflow: TextOverflow.ellipsis),
                   Text(
-                    '${s.myName} · ${fmtDateWithWeekday(DateTime.now())}',
+                    fmtDateWithWeekday(DateTime.now()),
                     style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
                   ),
                 ],
@@ -76,10 +78,40 @@ class _DashboardPageState extends State<DashboardPage> {
                   if (unseen > 0) ...[
                     _NoticeCard(
                       icon: Icons.notifications_active_outlined,
-                      color: Palette.side(s.otherSide),
-                      text: '${faDigits(unseen)} هزینهٔ جدید از ${s.otherName} ثبت شده است.',
+                      color: scheme.primary,
+                      text: '${faDigits(unseen)} هزینهٔ جدید از گوشی دیگر ثبت شده است.',
                       actionLabel: 'مشاهده',
-                      onAction: () => widget.onOpenEntries(EntriesFilter(side: s.otherSide)),
+                      onAction: () => widget.onOpenEntries(null),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (s.inbox.isNotEmpty) ...[
+                    Panel(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+                      onTap: () => InboxPage.open(context),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.inbox_outlined, size: 18, color: Palette.amber),
+                                    const SizedBox(width: 6),
+                                    Text('${faDigits(s.inbox.length)} رسید در انتظار ثبت', style: text.titleSmall),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text('روی هر رسید بزنید و هزینه‌اش را ثبت کنید.', style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                                const SizedBox(height: 8),
+                                InboxThumbStrip(items: s.inbox),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.chevron_left, color: scheme.onSurfaceVariant),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -283,7 +315,11 @@ class _TotalCard extends StatelessWidget {
           AnimatedAmount(stats.total, unit: unit, size: 34, color: Colors.white),
           const SizedBox(height: 2),
           Text(
-            stats.total == 0 ? 'هزینه‌ای در این بازه ثبت نشده' : moneyToWords(stats.total, unit: unit),
+            stats.total == 0
+                ? 'هزینه‌ای در این بازه ثبت نشده'
+                : stats.adjustedCount > 0
+                    ? 'پرداختی واقعی ${fmtCompact(stats.paidTotal, unit: unit)} · ${faDigits(stats.adjustedCount)} مورد با معادل امروز'
+                    : moneyToWords(stats.total, unit: unit),
             style: text.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.75)),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -362,17 +398,11 @@ class _BalanceCard extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final debtor = stats.debtor ?? Side.b;
     final balanced = stats.debtor == null || stats.owed < 1000;
-    final iOwe = !balanced && debtor == s.side;
-    final color = balanced ? Palette.positive : (iOwe ? Palette.negative : Palette.positive);
+    final color = balanced ? Palette.positive : Palette.side(debtor);
 
-    String headline;
-    if (balanced) {
-      headline = 'حساب‌ها تراز است';
-    } else if (iOwe) {
-      headline = 'شما به ${s.nameOf(debtor.other)} بدهکارید';
-    } else {
-      headline = '${s.nameOf(debtor)} به شما بدهکار است';
-    }
+    final headline = balanced
+        ? 'حساب‌ها تراز است'
+        : '${s.nameOf(debtor)} به ${s.nameOf(debtor.other)} بدهکار است';
 
     return Panel(
       child: Column(
@@ -384,7 +414,7 @@ class _BalanceCard extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(13)),
-                child: Icon(balanced ? Icons.balance : (iOwe ? Icons.call_made : Icons.call_received), color: color),
+                child: Icon(balanced ? Icons.balance : Icons.swap_horiz, color: color),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -406,7 +436,7 @@ class _BalanceCard extends StatelessWidget {
             decoration: BoxDecoration(color: scheme.surfaceContainerHighest.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(14)),
             child: Column(
               children: [
-                _kv(context, 'کل هزینه‌های پروژه', fmtMoney(stats.allTotal, unit: unit)),
+                _kv(context, 'کل هزینه‌های پروژه (با معادل امروز)', fmtMoney(stats.allTotal, unit: unit)),
                 _kv(context, 'سهم ${config.sideAName} (${faDigits(config.shareA)} دانگ)', fmtMoney(stats.fairA, unit: unit)),
                 _kv(context, 'سهم ${config.sideBName} (${faDigits(config.shareB)} دانگ)', fmtMoney(stats.fairB, unit: unit)),
                 const Divider(height: 14),

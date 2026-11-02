@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-/// دو طرف مشارکت: a = مالک اپ (شما)، b = شرکا.
+/// دو طرف مشارکت: a = سیوان، b = شرکا.
 enum Side { a, b }
 
 extension SideX on Side {
@@ -57,6 +57,13 @@ const categories = <Category>[
 Category categoryOf(String key) =>
     categories.firstWhere((c) => c.key == key, orElse: () => categories.last);
 
+/// برچسب‌های پیشنهادی برای پیوست‌ها.
+const attachmentLabels = <String>['رسید خرید', 'فاکتور', 'رسید واریز', 'سند قیمت روز', 'سایر'];
+
+/// نام‌های پیش‌فرض طرف‌ها.
+const defaultSideAName = 'سیوان';
+const defaultSideBName = 'شرکا (طرف نوری)';
+
 /// تنظیمات مشترک پروژه (در Firestore: rooms/{roomId}).
 class RoomConfig {
   final String name;
@@ -68,8 +75,8 @@ class RoomConfig {
 
   const RoomConfig({
     this.name = 'پروژهٔ ساخت',
-    this.sideAName = 'من',
-    this.sideBName = 'شرکا',
+    this.sideAName = defaultSideAName,
+    this.sideBName = defaultSideBName,
     this.shareA = 3,
     this.shareB = 3,
     this.createdAt,
@@ -107,10 +114,17 @@ class RoomConfig {
 
   static RoomConfig fromMap(Map<String, dynamic>? m, {DateTime? createdAt}) {
     if (m == null) return const RoomConfig();
+    String name(String? v, String fallback) {
+      final t = v?.trim() ?? '';
+      // نام‌های پیش‌فرض نسخهٔ قبلی به نام‌های جدید تبدیل می‌شوند
+      if (t.isEmpty || t == 'من' || t == 'شرکا') return fallback;
+      return t;
+    }
+
     return RoomConfig(
       name: (m['name'] as String?)?.trim().isNotEmpty == true ? m['name'] as String : 'پروژهٔ ساخت',
-      sideAName: (m['sideAName'] as String?) ?? 'من',
-      sideBName: (m['sideBName'] as String?) ?? 'شرکا',
+      sideAName: name(m['sideAName'] as String?, defaultSideAName),
+      sideBName: name(m['sideBName'] as String?, defaultSideBName),
       shareA: ((m['shareA'] as num?)?.toInt() ?? 3).clamp(1, 6).toInt(),
       shareB: ((m['shareB'] as num?)?.toInt() ?? 3).clamp(1, 6).toInt(),
       createdAt: createdAt,
@@ -118,20 +132,38 @@ class RoomConfig {
   }
 }
 
+/// پیوست (رسید/سند) یک هزینه. تصویر کامل در receipts/{id} ذخیره می‌شود.
+class Attachment {
+  final String id;
+  final String label;
+  final Uint8List? thumb;
+  const Attachment({required this.id, this.label = 'رسید خرید', this.thumb});
+
+  Attachment copyWith({String? label, Uint8List? thumb}) =>
+      Attachment(id: id, label: label ?? this.label, thumb: thumb ?? this.thumb);
+}
+
 /// یک هزینهٔ ثبت‌شده.
 class Entry {
   final String id;
+  /// پول از جیب چه کسی رفته (برای محاسبهٔ سهم‌ها).
   final Side side;
-  final int amount; // تومان
+  /// چه کسی خرید را انجام داده (پیش‌فرض: همان پرداخت‌کننده).
+  final Side buyer;
+  /// مبلغ واقعاً پرداخت‌شده (تومان).
+  final int amount;
+  /// معادل امروز (قیمت روز) — اگر تعیین شده باشد، در حساب‌وکتاب همین منظور می‌شود.
+  final int? adjustedAmount;
   final String title;
   final String category;
   final DateTime paidAt;
   final String note;
   final PayMethod method;
-  final bool hasReceipt;
-  final Uint8List? thumb;
+  final List<Attachment> attachments;
   final DateTime createdAt;
   final DateTime? updatedAt;
+  /// شناسهٔ دستگاهی که این مورد را ثبت کرده.
+  final String createdBy;
   final bool deleted;
   /// هنوز به سرور نرسیده (نوشتهٔ محلی در انتظار).
   final bool pending;
@@ -139,48 +171,62 @@ class Entry {
   const Entry({
     required this.id,
     required this.side,
+    Side? buyer,
     required this.amount,
+    this.adjustedAmount,
     required this.title,
     required this.category,
     required this.paidAt,
     this.note = '',
     this.method = PayMethod.card,
-    this.hasReceipt = false,
-    this.thumb,
+    this.attachments = const [],
     required this.createdAt,
     this.updatedAt,
+    this.createdBy = '',
     this.deleted = false,
     this.pending = false,
-  });
+  }) : buyer = buyer ?? side;
+
+  /// مبلغی که در حساب‌وکتاب منظور می‌شود.
+  int get effectiveAmount => adjustedAmount ?? amount;
+  bool get isAdjusted => adjustedAmount != null && adjustedAmount != amount;
+  bool get hasReceipt => attachments.isNotEmpty;
+  Uint8List? get thumb => attachments.isEmpty ? null : attachments.first.thumb;
+  /// خرید به نیابت: پول از یک طرف، خرید توسط طرف دیگر.
+  bool get isProxy => buyer != side;
 
   Entry copyWith({
     Side? side,
+    Side? buyer,
     int? amount,
+    int? adjustedAmount,
+    bool clearAdjusted = false,
     String? title,
     String? category,
     DateTime? paidAt,
     String? note,
     PayMethod? method,
-    bool? hasReceipt,
-    Uint8List? thumb,
-    bool clearThumb = false,
+    List<Attachment>? attachments,
     DateTime? updatedAt,
+    String? createdBy,
     bool? deleted,
     bool? pending,
   }) =>
       Entry(
         id: id,
         side: side ?? this.side,
+        buyer: buyer ?? this.buyer,
         amount: amount ?? this.amount,
+        adjustedAmount: clearAdjusted ? null : (adjustedAmount ?? this.adjustedAmount),
         title: title ?? this.title,
         category: category ?? this.category,
         paidAt: paidAt ?? this.paidAt,
         note: note ?? this.note,
         method: method ?? this.method,
-        hasReceipt: hasReceipt ?? this.hasReceipt,
-        thumb: clearThumb ? null : (thumb ?? this.thumb),
+        attachments: attachments ?? this.attachments,
         createdAt: createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
+        createdBy: createdBy ?? this.createdBy,
         deleted: deleted ?? this.deleted,
         pending: pending ?? this.pending,
       );
@@ -207,6 +253,24 @@ class Settlement {
     this.note = '',
     required this.createdAt,
     this.deleted = false,
+    this.pending = false,
+  });
+}
+
+/// رسیدِ دریافتی که هنوز به هزینه تبدیل نشده (صندوق رسیدها).
+class InboxItem {
+  final String id;
+  final Uint8List? thumb;
+  final DateTime createdAt;
+  final String createdBy;
+  final String note;
+  final bool pending;
+  const InboxItem({
+    required this.id,
+    this.thumb,
+    required this.createdAt,
+    this.createdBy = '',
+    this.note = '',
     this.pending = false,
   });
 }

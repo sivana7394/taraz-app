@@ -108,6 +108,23 @@ def patch_gradle_groovy(p):
     print("patched", p)
 
 
+SHARE_FILTERS = '''
+            <!-- دریافت عکس رسید از گالری/اسکرین‌شات/پیام‌رسان‌ها (Share ← تراز) -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <!-- میانبرهای آیکون اپ -->
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+'''
+
+
 def patch_manifest(p):
     s = read(p)
     orig = s
@@ -116,9 +133,176 @@ def patch_manifest(p):
         s = s.replace("<application", '<uses-permission android:name="android.permission.INTERNET"/>\n    <application', 1)
     if "ACCESS_NETWORK_STATE" not in s:
         s = s.replace("<application", '<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>\n    <application', 1)
+    if "android.intent.action.SEND" not in s:
+        # اولین intent-filter (MAIN/LAUNCHER) داخل MainActivity را پیدا و پس از آن اضافه می‌کنیم
+        m = re.search(r"(<intent-filter>.*?android\.intent\.action\.MAIN.*?</intent-filter>)", s, flags=re.S)
+        if m:
+            s = s[: m.end()] + SHARE_FILTERS + s[m.end():]
+        else:
+            print("WARN: MAIN intent-filter not found; share filters not added", file=sys.stderr)
     if s != orig:
         write(p, s)
     print("patched", p)
+
+
+MAIN_ACTIVITY = '''package ir.sivan.taraz
+
+import android.content.Intent
+import android.net.Uri
+import android.os.Bundle
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+import java.io.File
+import java.io.FileOutputStream
+
+/**
+ * پل بومی: دریافت تصاویر Share شده و میانبرهای آیکون، و تحویل به Dart از طریق MethodChannel.
+ */
+class MainActivity : FlutterActivity() {
+    private val channelName = "ir.sivan.taraz/share"
+    private var channel: MethodChannel? = null
+    private var pending: HashMap<String, Any?>? = null
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
+        channel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getInitialShare" -> {
+                    result.success(pending)
+                    pending = null
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+        val p = pending
+        if (p != null) {
+            channel?.invokeMethod("onShare", p)
+            pending = null
+        }
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent == null) return
+        val action = intent.action ?: return
+        val payload = HashMap<String, Any?>()
+        when (action) {
+            Intent.ACTION_SEND -> {
+                @Suppress("DEPRECATION")
+                val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+                val paths = ArrayList<String>()
+                if (uri != null) copyToCache(uri)?.let { paths.add(it) }
+                if (paths.isEmpty()) return
+                payload["paths"] = paths
+            }
+            Intent.ACTION_SEND_MULTIPLE -> {
+                @Suppress("DEPRECATION")
+                val uris = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM) ?: return
+                val paths = ArrayList<String>()
+                for (u in uris) copyToCache(u)?.let { paths.add(it) }
+                if (paths.isEmpty()) return
+                payload["paths"] = paths
+            }
+            "ir.sivan.taraz.ADD_EXPENSE" -> payload["shortcut"] = "add"
+            "ir.sivan.taraz.ADD_RECEIPT" -> payload["shortcut"] = "receipt"
+            else -> return
+        }
+        // جلوگیری از پردازش دوباره پس از چرخش صفحه
+        intent.action = Intent.ACTION_MAIN
+        intent.removeExtra(Intent.EXTRA_STREAM)
+        pending = payload
+    }
+
+    private fun copyToCache(uri: Uri): String? {
+        return try {
+            val dir = File(cacheDir, "shared")
+            if (!dir.exists()) dir.mkdirs()
+            val name = "share-" + System.currentTimeMillis() + "-" + (0..99999).random() + ".img"
+            val out = File(dir, name)
+            contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(out).use { output -> input.copyTo(output) }
+            } ?: return null
+            out.absolutePath
+        } catch (e: Exception) {
+            null
+        }
+    }
+}
+'''
+
+SHORTCUTS_XML = '''<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="add_expense"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_add_short"
+        android:shortcutLongLabel="@string/shortcut_add_long">
+        <intent
+            android:action="ir.sivan.taraz.ADD_EXPENSE"
+            android:targetPackage="ir.sivan.taraz"
+            android:targetClass="ir.sivan.taraz.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="add_receipt"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_receipt_short"
+        android:shortcutLongLabel="@string/shortcut_receipt_long">
+        <intent
+            android:action="ir.sivan.taraz.ADD_RECEIPT"
+            android:targetPackage="ir.sivan.taraz"
+            android:targetClass="ir.sivan.taraz.MainActivity" />
+    </shortcut>
+</shortcuts>
+'''
+
+STRINGS_XML = '''<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shortcut_add_short">ثبت هزینه</string>
+    <string name="shortcut_add_long">ثبت سریع هزینه</string>
+    <string name="shortcut_receipt_short">عکس رسید</string>
+    <string name="shortcut_receipt_long">عکس رسید و ثبت هزینه</string>
+</resources>
+'''
+
+
+def write_native(app_dir):
+    main = os.path.join(app_dir, "src", "main")
+    kt_dir = os.path.join(main, "kotlin", "ir", "sivan", "taraz")
+    os.makedirs(kt_dir, exist_ok=True)
+    # هر MainActivity دیگری (مثلاً در مسیر پکیج قدیمی) را حذف می‌کنیم تا تداخل پیش نیاید
+    for root, _dirs, files in os.walk(os.path.join(main, "kotlin")):
+        for f in files:
+            if f == "MainActivity.kt" and os.path.abspath(root) != os.path.abspath(kt_dir):
+                os.remove(os.path.join(root, f))
+    write(os.path.join(kt_dir, "MainActivity.kt"), MAIN_ACTIVITY)
+    xml_dir = os.path.join(main, "res", "xml")
+    os.makedirs(xml_dir, exist_ok=True)
+    write(os.path.join(xml_dir, "shortcuts.xml"), SHORTCUTS_XML)
+    values_dir = os.path.join(main, "res", "values")
+    os.makedirs(values_dir, exist_ok=True)
+    strings = os.path.join(values_dir, "strings.xml")
+    if os.path.exists(strings):
+        t = read(strings)
+        if "shortcut_add_short" not in t:
+            t = t.replace("</resources>", STRINGS_XML.split("<resources>")[1])
+            write(strings, t)
+    else:
+        write(strings, STRINGS_XML)
+    print("wrote MainActivity.kt, shortcuts.xml, strings.xml")
 
 
 def patch_gradle_properties(p):
@@ -143,6 +327,7 @@ def main():
         sys.exit(1)
     patch_manifest(os.path.join(APP, "src", "main", "AndroidManifest.xml"))
     patch_gradle_properties(os.path.join(ROOT, "android", "gradle.properties"))
+    write_native(APP)
 
 
 if __name__ == "__main__":

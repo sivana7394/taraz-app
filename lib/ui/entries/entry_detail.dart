@@ -1,4 +1,4 @@
-// جزئیات یک هزینه + نمایش رسید.
+// جزئیات یک هزینه + نمایش رسیدها و اسناد.
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -26,18 +26,6 @@ class EntryDetailPage extends StatefulWidget {
 }
 
 class _EntryDetailPageState extends State<EntryDetailPage> {
-  Future<Uint8List?>? _receipt;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final s = context.read<AppState>();
-    final e = s.entries.where((x) => x.id == widget.entryId).firstOrNull;
-    if (e != null && e.hasReceipt && _receipt == null) {
-      _receipt = s.getReceipt(e.id);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final s = context.watch<AppState>();
@@ -51,32 +39,26 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       );
     }
     final cat = categoryOf(e.category);
-    final canEdit = s.canEdit(e);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('جزئیات هزینه'),
         actions: [
-          if (canEdit)
-            IconButton(
-              tooltip: 'ویرایش',
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: () async {
-                final changed = await EntryEditorPage.open(context, entry: e);
-                if (changed == true && mounted) setState(() => _receipt = null);
-              },
-            ),
-          if (canEdit)
-            IconButton(
-              tooltip: 'حذف',
-              icon: Icon(Icons.delete_outline, color: scheme.error),
-              onPressed: () async {
-                final ok = await confirmDialog(context, title: 'حذف هزینه', message: 'هزینهٔ «${e.title}» به مبلغ ${fmtMoney(e.amount, unit: s.unit)} حذف شود؟');
-                if (!ok || !context.mounted) return;
-                await s.deleteEntry(e.id);
-                if (context.mounted) Navigator.pop(context);
-              },
-            ),
+          IconButton(
+            tooltip: 'ویرایش',
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () => EntryEditorPage.open(context, entry: e),
+          ),
+          IconButton(
+            tooltip: 'حذف',
+            icon: Icon(Icons.delete_outline, color: scheme.error),
+            onPressed: () async {
+              final ok = await confirmDialog(context, title: 'حذف هزینه', message: 'هزینهٔ «${e.title}» به مبلغ ${fmtMoney(e.amount, unit: s.unit)} حذف شود؟');
+              if (!ok || !context.mounted) return;
+              await s.deleteEntry(e);
+              if (context.mounted) Navigator.pop(context);
+            },
+          ),
           const SizedBox(width: 4),
         ],
       ),
@@ -101,13 +83,38 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                         ],
                       ),
                     ),
-                    SideBadge(e.side, s.nameOf(e.side)),
                   ],
                 ),
-                const SizedBox(height: 18),
-                AnimatedAmount(e.amount, unit: s.unit, size: 32),
-                const SizedBox(height: 4),
-                Text(moneyToWords(e.amount, unit: s.unit), style: text.bodySmall?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    SideBadge(e.side, 'پرداخت: ${s.nameOf(e.side)}'),
+                    if (e.isProxy) SideBadge(e.buyer, 'خرید توسط ${s.nameOf(e.buyer)} (به نیابت)'),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                if (e.isAdjusted) ...[
+                  Text('معادل امروز — منظورشده در حساب', style: text.labelMedium?.copyWith(color: Palette.amber)),
+                  AnimatedAmount(e.effectiveAmount, unit: s.unit, size: 30, color: Palette.amber),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Text('پرداختی واقعی: ', style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                      Text(fmtMoney(e.amount, unit: s.unit), style: text.bodySmall?.copyWith(fontWeight: FontWeight.w700)),
+                      const SizedBox(width: 8),
+                      Text(
+                        '(${e.adjustedAmount! >= e.amount ? '+' : '−'}${fmtPercent((e.adjustedAmount! - e.amount).abs() / (e.amount == 0 ? 1 : e.amount))})',
+                        style: text.bodySmall?.copyWith(color: Palette.amber),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  AnimatedAmount(e.amount, unit: s.unit, size: 32),
+                  const SizedBox(height: 4),
+                  Text(moneyToWords(e.amount, unit: s.unit), style: text.bodySmall?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600)),
+                ],
                 const SizedBox(height: 16),
                 const Divider(),
                 const SizedBox(height: 8),
@@ -131,54 +138,12 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
             ),
           ),
           const SizedBox(height: 14),
-          if (e.hasReceipt) ...[
-            SectionTitle('رسید', action: 'اشتراک‌گذاری', onAction: () => _share(e)),
-            FutureBuilder<Uint8List?>(
-              future: _receipt,
-              builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return Panel(
-                    padding: EdgeInsets.zero,
-                    child: SizedBox(
-                      height: 260,
-                      child: Center(
-                        child: e.thumb != null
-                            ? Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  Image.memory(e.thumb!, fit: BoxFit.cover),
-                                  Container(color: Colors.black26),
-                                  const Center(child: CircularProgressIndicator(color: Colors.white)),
-                                ],
-                              )
-                            : const CircularProgressIndicator(),
-                      ),
-                    ),
-                  );
-                }
-                final bytes = snap.data;
-                if (bytes == null) {
-                  return const Panel(child: Text('رسید در دسترس نیست (شاید هنوز از دستگاه ثبت‌کننده ارسال نشده).'));
-                }
-                return Panel(
-                  padding: EdgeInsets.zero,
-                  child: GestureDetector(
-                    onTap: () => _openViewer(context, bytes, e.id),
-                    child: Hero(
-                      tag: 'receipt-${e.id}',
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 420),
-                        child: Image.memory(bytes, fit: BoxFit.cover, width: double.infinity, gaplessPlayback: true),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: Text('برای بزرگ‌نمایی روی تصویر بزنید', style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-            ),
+          if (e.attachments.isNotEmpty) ...[
+            SectionTitle('رسیدها و اسناد (${faDigits(e.attachments.length)})'),
+            for (final a in e.attachments) ...[
+              _AttachmentCard(entry: e, attachment: a),
+              const SizedBox(height: 10),
+            ],
           ] else
             Panel(
               color: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
@@ -187,11 +152,10 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                   Icon(Icons.receipt_long_outlined, color: scheme.onSurfaceVariant),
                   const SizedBox(width: 10),
                   Expanded(child: Text('این هزینه رسید ندارد.', style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant))),
-                  if (canEdit)
-                    TextButton(
-                      onPressed: () => EntryEditorPage.open(context, entry: e),
-                      child: const Text('افزودن رسید'),
-                    ),
+                  TextButton(
+                    onPressed: () => EntryEditorPage.open(context, entry: e),
+                    child: const Text('افزودن رسید'),
+                  ),
                 ],
               ),
             ),
@@ -216,34 +180,117 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       ),
     );
   }
+}
 
-  Future<void> _share(Entry e) async {
-    final bytes = await _receipt;
+class _AttachmentCard extends StatefulWidget {
+  const _AttachmentCard({required this.entry, required this.attachment});
+  final Entry entry;
+  final Attachment attachment;
+  @override
+  State<_AttachmentCard> createState() => _AttachmentCardState();
+}
+
+class _AttachmentCardState extends State<_AttachmentCard> {
+  Future<Uint8List?>? _full;
+
+  @override
+  void initState() {
+    super.initState();
+    _full = context.read<AppState>().getReceipt(widget.attachment.id);
+  }
+
+  Future<void> _share() async {
+    final bytes = await _full;
     if (bytes == null || !mounted) return;
     final dir = await getTemporaryDirectory();
-    final f = File('${dir.path}/receipt-${e.id}.jpg');
+    final f = File('${dir.path}/receipt-${widget.attachment.id}.jpg');
     await f.writeAsBytes(bytes, flush: true);
     final s = context.read<AppState>();
+    final e = widget.entry;
     await SharePlus.instance.share(ShareParams(
       files: [XFile(f.path, mimeType: 'image/jpeg')],
-      text: '${e.title} — ${fmtMoney(e.amount, unit: s.unit)} — ${fmtDate(e.paidAt)}',
+      text: '${widget.attachment.label} — ${e.title} — ${fmtMoney(e.amount, unit: s.unit)} — ${fmtDate(e.paidAt)}',
     ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final a = widget.attachment;
+    return Panel(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 8, 0),
+            child: Row(
+              children: [
+                Icon(Icons.receipt_long_outlined, size: 18, color: scheme.primary),
+                const SizedBox(width: 6),
+                Expanded(child: Text(a.label, style: text.titleSmall)),
+                IconButton(tooltip: 'اشتراک‌گذاری', icon: const Icon(Icons.ios_share, size: 20), onPressed: _share),
+              ],
+            ),
+          ),
+          FutureBuilder<Uint8List?>(
+            future: _full,
+            builder: (context, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return SizedBox(
+                  height: 220,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (a.thumb != null) Image.memory(a.thumb!, fit: BoxFit.cover),
+                      Container(color: Colors.black26),
+                      const Center(child: CircularProgressIndicator(color: Colors.white)),
+                    ],
+                  ),
+                );
+              }
+              final bytes = snap.data;
+              if (bytes == null) {
+                return const Padding(padding: EdgeInsets.all(16), child: Text('تصویر در دسترس نیست (شاید هنوز از دستگاه ثبت‌کننده ارسال نشده).'));
+              }
+              return GestureDetector(
+                onTap: () => _openViewer(context, bytes, a.id),
+                child: Hero(
+                  tag: 'receipt-${a.id}',
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 420),
+                    child: Image.memory(bytes, fit: BoxFit.cover, width: double.infinity, gaplessPlayback: true),
+                  ),
+                ),
+              );
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Center(child: Text('برای بزرگ‌نمایی روی تصویر بزنید', style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant))),
+          ),
+        ],
+      ),
+    );
   }
 
   void _openViewer(BuildContext context, Uint8List bytes, String id) {
     Navigator.of(context).push(PageRouteBuilder(
       opaque: false,
       barrierColor: Colors.black,
-      pageBuilder: (_, __, ___) => _ReceiptViewer(bytes: bytes, tag: 'receipt-$id'),
+      pageBuilder: (_, __, ___) => ReceiptViewer(bytes: bytes, tag: 'receipt-$id'),
       transitionsBuilder: (_, a, __, child) => FadeTransition(opacity: a, child: child),
     ));
   }
 }
 
-class _ReceiptViewer extends StatelessWidget {
-  const _ReceiptViewer({required this.bytes, required this.tag});
+/// نمایش تمام‌صفحهٔ یک تصویر با بزرگ‌نمایی.
+class ReceiptViewer extends StatelessWidget {
+  const ReceiptViewer({super.key, required this.bytes, required this.tag, this.title = 'رسید'});
   final Uint8List bytes;
   final String tag;
+  final String title;
 
   @override
   Widget build(BuildContext context) {
@@ -252,7 +299,7 @@ class _ReceiptViewer extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('رسید', style: TextStyle(color: Colors.white)),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
       ),
       body: Center(
         child: Hero(

@@ -22,7 +22,7 @@ class Exporter {
   String csv(List<Entry> entries, {List<Settlement> settlements = const []}) {
     String q(String s) => '"${s.replaceAll('"', '""')}"';
     final sb = StringBuffer('﻿');
-    sb.writeln(['ردیف', 'تاریخ', 'ساعت', 'طرف', 'موضوع', 'دسته', 'مبلغ (${unit.label})', 'روش پرداخت', 'رسید', 'توضیح'].map(q).join(','));
+    sb.writeln(['ردیف', 'تاریخ', 'ساعت', 'پرداخت‌کننده', 'خریدار', 'موضوع', 'دسته', 'مبلغ پرداختی (${unit.label})', 'معادل امروز (${unit.label})', 'مبلغ منظورشده (${unit.label})', 'روش پرداخت', 'تعداد سند', 'توضیح'].map(q).join(','));
     var i = 1;
     for (final e in entries) {
       sb.writeln([
@@ -30,11 +30,14 @@ class Exporter {
         q(enDigits(fmtDateNumeric(e.paidAt))),
         q(enDigits(fmtTime(e.paidAt))),
         q(config.sideName(e.side)),
+        q(config.sideName(e.buyer)),
         q(e.title),
         q(categoryOf(e.category).label),
         _v(e.amount).toString(),
+        e.adjustedAmount == null ? '' : _v(e.adjustedAmount!).toString(),
+        _v(e.effectiveAmount).toString(),
         q(e.method.label),
-        q(e.hasReceipt ? 'دارد' : 'ندارد'),
+        e.attachments.length.toString(),
         q(e.note),
       ].join(','));
     }
@@ -109,7 +112,11 @@ class Exporter {
           decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColor.fromHex('#E5E7EB')), borderRadius: pw.BorderRadius.circular(6)),
           child: pw.Column(
             children: [
-              kv('جمع هزینه‌های این بازه', fmtMoney(stats.total, unit: unit)),
+              kv('جمع هزینه‌های این بازه (منظورشده)', fmtMoney(stats.total, unit: unit)),
+              if (stats.adjustedCount > 0) ...[
+                pw.SizedBox(height: 3),
+                kv('پرداختی واقعی / ${faDigits(stats.adjustedCount)} مورد با معادل امروز', fmtMoney(stats.paidTotal, unit: unit)),
+              ],
               pw.SizedBox(height: 3),
               kv('پرداختی ${config.sideAName} (این بازه)', fmtMoney(stats.spentA, unit: unit), color: aColor),
               pw.SizedBox(height: 3),
@@ -135,13 +142,14 @@ class Exporter {
         pw.Table(
           border: pw.TableBorder.all(color: PdfColor.fromHex('#E5E7EB'), width: 0.5),
           columnWidths: {
-            0: const pw.FixedColumnWidth(22),
-            1: const pw.FixedColumnWidth(62),
-            2: const pw.FixedColumnWidth(44),
+            0: const pw.FixedColumnWidth(20),
+            1: const pw.FixedColumnWidth(58),
+            2: const pw.FixedColumnWidth(60),
             3: const pw.FlexColumnWidth(3),
             4: const pw.FlexColumnWidth(2),
-            5: const pw.FixedColumnWidth(78),
-            6: const pw.FixedColumnWidth(34),
+            5: const pw.FixedColumnWidth(70),
+            6: const pw.FixedColumnWidth(70),
+            7: const pw.FixedColumnWidth(26),
           },
           children: [
             pw.TableRow(
@@ -149,11 +157,12 @@ class Exporter {
               children: [
                 cell('#', bold: true),
                 cell('تاریخ', bold: true),
-                cell('طرف', bold: true),
+                cell('پرداخت‌کننده', bold: true),
                 cell('موضوع', bold: true),
                 cell('دسته', bold: true),
-                cell('مبلغ (${unit.label})', bold: true),
-                cell('رسید', bold: true),
+                cell('پرداختی', bold: true),
+                cell('منظورشده', bold: true),
+                cell('سند', bold: true),
               ],
             ),
             for (var i = 0; i < entries.length; i++)
@@ -161,11 +170,17 @@ class Exporter {
                 children: [
                   cell(faDigits(i + 1)),
                   cell(fmtDateNumeric(entries[i].paidAt)),
-                  cell(config.sideName(entries[i].side), color: entries[i].side == Side.a ? aColor : bColor, bold: true),
+                  cell(
+                    entries[i].isProxy ? '${config.sideName(entries[i].side)}\n(خرید: ${config.sideName(entries[i].buyer)})' : config.sideName(entries[i].side),
+                    color: entries[i].side == Side.a ? aColor : bColor,
+                    bold: true,
+                    size: 8,
+                  ),
                   cell(entries[i].title),
                   cell(categoryOf(entries[i].category).label, color: grey),
-                  cell(fmtMoney(entries[i].amount, unit: unit, withUnit: false), bold: true),
-                  cell(entries[i].hasReceipt ? 'دارد' : 'ندارد', align: pw.TextAlign.center, size: 8),
+                  cell(fmtMoney(entries[i].amount, unit: unit, withUnit: false), size: 8),
+                  cell(fmtMoney(entries[i].effectiveAmount, unit: unit, withUnit: false), bold: true, color: entries[i].isAdjusted ? PdfColor.fromHex('#B45309') : null),
+                  cell(entries[i].attachments.isEmpty ? '—' : faDigits(entries[i].attachments.length), align: pw.TextAlign.center, size: 8),
                 ],
               ),
           ],

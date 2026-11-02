@@ -137,6 +137,35 @@ const firebaseConfig = {
       expect(st.debtor, Side.a);
     });
 
+    test('معادل امروز در حساب منظور می‌شود', () {
+      final st = Stats.compute(
+        entries: [
+          Entry(id: 'x', side: Side.a, amount: 100, adjustedAmount: 150, title: 't', category: 'materials', paidAt: DateTime(2026, 10, 20), createdAt: DateTime(2026, 10, 20)),
+          e(Side.b, 50),
+        ],
+        settlements: const [],
+        config: const RoomConfig(),
+        period: Period.all(),
+        now: DateTime(2026, 11, 2),
+      );
+      expect(st.total, 200);
+      expect(st.paidTotal, 150);
+      expect(st.adjustedCount, 1);
+      expect(st.adjustmentDelta, 50);
+      expect(st.allSpentA, 150);
+      expect(st.balanceA, 50); // b باید ۵۰ به a بدهد
+    });
+
+    test('خرید به نیابت: سهم به نام پرداخت‌کننده', () {
+      final en = Entry(id: 'p', side: Side.b, buyer: Side.a, amount: 80, title: 't', category: 'materials', paidAt: DateTime(2026, 10, 20), createdAt: DateTime(2026, 10, 20));
+      expect(en.isProxy, isTrue);
+      final st = Stats.compute(entries: [en], settlements: const [], config: const RoomConfig(), period: Period.all(), now: DateTime(2026, 11, 2));
+      expect(st.allSpentB, 80);
+      expect(st.allSpentA, 0);
+      expect(st.debtor, Side.a);
+      expect(st.owed, 40);
+    });
+
     test('بازهٔ ماه و سطل‌های ماهانه', () {
       final now = DateTime(2026, 11, 2);
       final st = Stats.compute(

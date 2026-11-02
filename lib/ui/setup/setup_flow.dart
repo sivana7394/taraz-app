@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/fa.dart';
-import '../../core/theme.dart';
 import '../../data/app_state.dart';
 import '../../data/firebase_config.dart';
 import '../../data/models.dart';
@@ -20,7 +19,6 @@ class SetupFlow extends StatefulWidget {
 
 class _SetupFlowState extends State<SetupFlow> {
   final _page = PageController();
-  Side _side = Side.a;
 
   void _go(int i) => _page.animateToPage(i, duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic);
 
@@ -39,13 +37,7 @@ class _SetupFlowState extends State<SetupFlow> {
           physics: const NeverScrollableScrollPhysics(),
           children: [
             _Welcome(onNext: () => _go(1)),
-            _RolePage(
-              side: _side,
-              onChanged: (s) => setState(() => _side = s),
-              onNext: () => _go(2),
-              onBack: () => _go(0),
-            ),
-            _ConnectPage(side: _side, onBack: () => _go(1)),
+            _ConnectPage(onBack: () => _go(0)),
           ],
         ),
       ),
@@ -83,13 +75,13 @@ class _Welcome extends StatelessWidget {
           Text('حسابداری مشارکت ساخت‌وساز', style: text.titleLarge),
           const SizedBox(height: 16),
           Text(
-            'هزینه‌های پروژه را دو طرف ثبت می‌کنند — با موضوع، مبلغ، تاریخ و عکس رسید — و همان لحظه روی گوشی هم دیده می‌شود. اپ خودش جمع می‌زند، سهم هر طرف را حساب می‌کند و می‌گوید کی به کی بدهکار است.',
+            'یک حساب مشترک برای همهٔ شرکا: هر کس از گوشی خودش هزینه را — با موضوع، مبلغ، تاریخ و عکس رسید — ثبت می‌کند و همان لحظه روی گوشی بقیه دیده می‌شود. اپ خودش جمع می‌زند، سهم هر طرف را حساب می‌کند و می‌گوید کی به کی بدهکار است.',
             style: text.bodyLarge?.copyWith(color: scheme.onSurfaceVariant),
           ),
           const SizedBox(height: 20),
           for (final (icon, t) in [
             (Icons.sync, 'همگام‌سازی آنی و کار بدون اینترنت'),
-            (Icons.receipt_long_outlined, 'عکس رسید همراه هر هزینه'),
+            (Icons.receipt_long_outlined, 'عکس رسید از گالری: Share ← تراز'),
             (Icons.pie_chart_outline, 'داشبورد، نمودار و خروجی اکسل/PDF'),
           ])
             Padding(
@@ -105,84 +97,8 @@ class _Welcome extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-class _RolePage extends StatelessWidget {
-  const _RolePage({required this.side, required this.onChanged, required this.onNext, required this.onBack});
-  final Side side;
-  final ValueChanged<Side> onChanged;
-  final VoidCallback onNext;
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    Widget card(Side s, String title, String subtitle, IconData icon) {
-      final selected = side == s;
-      final c = Palette.side(s);
-      return Material(
-        color: selected ? c.withValues(alpha: 0.12) : Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: () => onChanged(s),
-          child: Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: selected ? c : scheme.outlineVariant.withValues(alpha: 0.6), width: selected ? 2 : 1),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(color: c.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(16)),
-                  child: Icon(icon, color: c),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: text.titleMedium),
-                      Text(subtitle, style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-                    ],
-                  ),
-                ),
-                Icon(selected ? Icons.check_circle : Icons.radio_button_unchecked, color: selected ? c : scheme.outlineVariant),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          IconButton(onPressed: onBack, icon: const Icon(Icons.arrow_back)),
-          const SizedBox(height: 8),
-          Text('این گوشی متعلق به کیست؟', style: text.headlineSmall),
-          const SizedBox(height: 6),
-          Text('هزینه‌هایی که از این گوشی ثبت می‌شود به نام همین طرف حساب می‌شود. نام‌ها بعداً در تنظیمات قابل تغییر است.', style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
-          const SizedBox(height: 24),
-          card(Side.a, 'طرف اول (من)', 'مدیر پروژه — ۳ دانگ', Icons.person_outline),
-          const SizedBox(height: 12),
-          card(Side.b, 'طرف دوم (شرکا)', 'شرکا — ۳ دانگ', Icons.group_outlined),
-          const Spacer(),
-          FilledButton(onPressed: onNext, child: const Text('ادامه')),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
 class _ConnectPage extends StatefulWidget {
-  const _ConnectPage({required this.side, required this.onBack});
-  final Side side;
+  const _ConnectPage({required this.onBack});
   final VoidCallback onBack;
 
   @override
@@ -219,7 +135,6 @@ class _ConnectPageState extends State<_ConnectPage> {
     try {
       await context.read<AppState>().connectWith(
             conn,
-            side: widget.side,
             createRoom: RoomConfig(name: _nameCtl.text.trim().isEmpty ? 'پروژهٔ ساخت' : _nameCtl.text.trim()),
           );
       // پس از اتصال، صفحهٔ خانه نمایش داده می‌شود و خودش برگهٔ کد دعوت را باز می‌کند.
@@ -241,7 +156,7 @@ class _ConnectPageState extends State<_ConnectPage> {
       _error = null;
     });
     try {
-      await context.read<AppState>().connectWith(conn, side: widget.side);
+      await context.read<AppState>().connectWith(conn);
     } on ConnError catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
@@ -292,7 +207,7 @@ class _ConnectPageState extends State<_ConnectPage> {
             icon: Icons.science_outlined,
             title: 'حالت نمایشی',
             subtitle: 'گشت‌وگذار در اپ با داده‌های نمونه، بدون اینترنت',
-            onTap: () => s.startDemo(widget.side),
+            onTap: () => s.startDemo(),
           ),
         ] else if (_mode == 1) ...[
           Text('ساخت پروژهٔ جدید', style: text.headlineSmall),

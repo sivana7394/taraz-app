@@ -165,13 +165,8 @@ service cloud.firestore {
       allow get, create, update: if roomId.size() >= 20;
       allow list, delete: if false;
 
-      match /entries/{entryId} {
-        allow read, write: if roomId.size() >= 20;
-      }
-      match /receipts/{entryId} {
-        allow read, write: if roomId.size() >= 20;
-      }
-      match /settlements/{id} {
+      // همهٔ زیرمجموعه‌های اتاق (entries, receipts, settlements, inbox, …)
+      match /{collection}/{docId} {
         allow read, write: if roomId.size() >= 20;
       }
     }

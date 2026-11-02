@@ -52,19 +52,18 @@ class SettingsPage extends StatelessWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.person_outline),
-                title: const Text('این گوشی متعلق به'),
-                subtitle: Text(s.myName),
-                trailing: const Icon(Icons.swap_horiz, size: 18),
-                onTap: () async {
-                  final ok = await confirmDialog(
-                    context,
-                    title: 'تغییر نقش این گوشی',
-                    message: 'هزینه‌هایی که از این گوشی ثبت می‌شود به نام «${s.otherName}» خواهد بود. ادامه می‌دهید؟',
-                    okLabel: 'تغییر',
-                    destructive: false,
-                  );
-                  if (ok) await s.setSide(s.otherSide);
-                },
+                title: const Text('پرداخت‌کنندهٔ پیش‌فرض در این گوشی'),
+                subtitle: Text('${s.nameOf(s.defaultPayer)} — در فرم هر هزینه قابل تغییر است'),
+                trailing: SegmentedButton<Side>(
+                  segments: [
+                    ButtonSegment(value: Side.a, label: Text(s.nameOf(Side.a), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    ButtonSegment(value: Side.b, label: Text(s.nameOf(Side.b), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  ],
+                  selected: {s.defaultPayer},
+                  onSelectionChanged: (v) => s.setDefaultPayer(v.first),
+                  showSelectedIcon: false,
+                  style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                ),
               ),
             ],
           ),
@@ -135,7 +134,7 @@ class SettingsPage extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.security_outlined),
                   title: const Text('قوانین پایگاه‌داده (Rules)'),
-                  subtitle: const Text('اگر در کنسول Firebase لازم شد، کپی کنید.'),
+                  subtitle: const Text('نسخهٔ جدید قوانین (شامل صندوق رسیدها) — در کنسول Firebase جای‌گذاری و Publish کنید.'),
                   trailing: const Icon(Icons.copy_outlined, size: 18),
                   onTap: () => copyWithToast(context, firestoreRulesText, message: 'قوانین کپی شد'),
                 ),
@@ -186,7 +185,7 @@ class SettingsPage extends StatelessWidget {
             child: Column(
               children: [
                 Text('تراز', style: text.titleMedium?.copyWith(color: scheme.primary)),
-                Text('حسابداری مشارکت ساخت‌وساز · نسخهٔ ۱.۰', style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                Text('حسابداری مشارکت ساخت‌وساز · نسخهٔ ۱.۱', style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
               ],
             ),
           ),

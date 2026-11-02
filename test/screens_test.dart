@@ -14,6 +14,7 @@ import 'package:taraz/data/models.dart';
 import 'package:taraz/data/repo.dart';
 import 'package:taraz/main.dart';
 import 'package:taraz/ui/entries/entry_detail.dart';
+import 'package:taraz/ui/inbox/inbox_page.dart';
 
 Future<void> _loadFonts() async {
   final loader = FontLoader('Vazirmatn');
@@ -59,7 +60,7 @@ void main() {
 
   Future<void> boot(WidgetTester tester, {bool demo = true, Brightness brightness = Brightness.light}) async {
     SharedPreferences.setMockInitialValues(demo
-        ? {'demo': true, 'side': 'a', 'onboarded': true, 'theme': brightness == Brightness.dark ? 'dark' : 'light'}
+        ? {'demo': true, 'side': 'a', 'onboarded': true, 'device_id': 'test-device', 'theme': brightness == Brightness.dark ? 'dark' : 'light'}
         : {'theme': 'light'});
     tester.view.physicalSize = const Size(390 * 3, 844 * 3);
     tester.view.devicePixelRatio = 3;
@@ -76,9 +77,6 @@ void main() {
     await boot(tester, demo: false);
     await _snap(tester, '01-welcome');
     await tester.tap(find.text('شروع'));
-    await _settle(tester, 600);
-    await _snap(tester, '02-role');
-    await tester.tap(find.text('ادامه'));
     await _settle(tester, 600);
     await _snap(tester, '03-connect');
     await tester.tap(find.text('ساخت پروژهٔ جدید'));
@@ -139,6 +137,14 @@ void main() {
     await tester.tap(find.text('ثبت تسویه').first, warnIfMissed: false);
     await _settle(tester, 800);
     await _snap(tester, '50-settlement');
+  });
+
+  testWidgets('inbox', (tester) async {
+    await boot(tester);
+    final nav = tester.state<NavigatorState>(find.byType(Navigator).first);
+    nav.push(MaterialPageRoute<void>(builder: (_) => const InboxPage()));
+    await _settle(tester, 900);
+    await _snap(tester, '70-inbox');
   });
 
   testWidgets('dark dashboard', (tester) async {

@@ -25,6 +25,7 @@ class LocalStore {
   static const _kPinSalt = 'pin_salt';
   static const _kLastSeen = 'last_seen_other';
   static const _kOnboarded = 'onboarded';
+  static const _kDeviceId = 'device_id';
 
   // اتصال
   FirebaseConn? get conn => FirebaseConn.fromStorageString(_p.getString(_kConn));
@@ -39,7 +40,17 @@ class LocalStore {
   bool get demo => _p.getBool(_kDemo) ?? false;
   Future<void> setDemo(bool v) => _p.setBool(_kDemo, v);
 
-  // نقش این دستگاه
+  /// شناسهٔ یکتای این نصب (برای تشخیص «ثبت‌شده از گوشی دیگر»).
+  String get deviceId {
+    var id = _p.getString(_kDeviceId);
+    if (id == null || id.isEmpty) {
+      id = DateTime.now().microsecondsSinceEpoch.toRadixString(36) + (1000 + DateTime.now().millisecond).toString();
+      _p.setString(_kDeviceId, id);
+    }
+    return id;
+  }
+
+  // پرداخت‌کنندهٔ پیش‌فرض در این گوشی (آخرین انتخاب)
   Side? get side {
     final s = _p.getString(_kSide);
     if (s == null) return null;
@@ -100,7 +111,7 @@ class LocalStore {
     return _hash(enDigits(pin), salt) == h;
   }
 
-  /// پاک‌کردن اتصال و نقش (خروج از پروژه) — تنظیمات ظاهر می‌ماند.
+  /// پاک‌کردن اتصال (خروج از پروژه) — تنظیمات ظاهر می‌ماند.
   Future<void> disconnect() async {
     await _p.remove(_kConn);
     await _p.remove(_kDemo);
