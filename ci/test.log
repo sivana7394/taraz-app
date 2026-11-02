@@ -10,14 +10,17 @@
 ✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: محاسبهٔ تراز ۵۰/۵۰ بدون تسویه
 ✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: محاسبهٔ تراز با تسویه
 ✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: محاسبهٔ تراز سهم نابرابر ۴/۲ دانگ
+✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: محاسبهٔ تراز معادل امروز در حساب منظور می‌شود
+✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: محاسبهٔ تراز خرید به نیابت: سهم به نام پرداخت‌کننده
 ✅ /home/runner/work/taraz-app/taraz-app/test/logic_test.dart: محاسبهٔ تراز بازهٔ ماه و سطل‌های ماهانه
 ✅ /home/runner/work/taraz-app/taraz-app/test/screens_test.dart: setup screens
 ✅ /home/runner/work/taraz-app/taraz-app/test/screens_test.dart: dashboard & entries
 ✅ /home/runner/work/taraz-app/taraz-app/test/screens_test.dart: entry editor & detail
 ✅ /home/runner/work/taraz-app/taraz-app/test/screens_test.dart: reports & settings
 ✅ /home/runner/work/taraz-app/taraz-app/test/screens_test.dart: settlement sheet
+✅ /home/runner/work/taraz-app/taraz-app/test/screens_test.dart: inbox
 ✅ /home/runner/work/taraz-app/taraz-app/test/screens_test.dart: dark dashboard
 ✅ /home/runner/work/taraz-app/taraz-app/test/screens_test.dart: side sanity
 ::endgroup::
 
-🎉 18 tests passed.
+🎉 21 tests passed.
