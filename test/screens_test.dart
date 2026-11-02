@@ -14,6 +14,7 @@ import 'package:taraz/data/models.dart';
 import 'package:taraz/data/repo.dart';
 import 'package:taraz/main.dart';
 import 'package:taraz/ui/entries/entry_detail.dart';
+import 'package:taraz/ui/entries/entry_editor.dart';
 import 'package:taraz/ui/inbox/inbox_page.dart';
 
 Future<void> _loadFonts() async {
@@ -145,6 +146,12 @@ void main() {
     nav.push(MaterialPageRoute<void>(builder: (_) => const InboxPage()));
     await _settle(tester, 900);
     await _snap(tester, '70-inbox');
+    final s = tester.element(find.byType(Scaffold).first).read<AppState>();
+    if (s.inbox.isNotEmpty) {
+      nav.push(MaterialPageRoute<void>(builder: (_) => EntryEditorPage(inboxItem: s.inbox.first)));
+      await _settle(tester, 1200);
+      await _snap(tester, '71-editor-from-inbox');
+    }
   });
 
   testWidgets('dark dashboard', (tester) async {

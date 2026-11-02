@@ -13,6 +13,8 @@ import '../../data/app_state.dart';
 import '../../data/models.dart';
 import '../widgets/common.dart';
 import '../widgets/jalali_picker.dart';
+import '../widgets/receipt_view.dart';
+import 'entry_detail.dart';
 
 /// پیوست در حال ویرایش (ممکن است هنوز بارگذاری نشده باشد).
 class _Draft {
@@ -63,6 +65,9 @@ class _EntryEditorPageState extends State<EntryEditorPage> {
   final List<String> _removedIds = [];
   bool _processing = false;
   bool _saving = false;
+  /// پنل رسید بالای فرم
+  double _paneFrac = 0.40;
+  bool _paneCollapsed = false;
 
   bool get _isEdit => widget.entry != null;
 
@@ -113,6 +118,13 @@ class _EntryEditorPageState extends State<EntryEditorPage> {
     _noteCtl.dispose();
     _amountFocus.dispose();
     super.dispose();
+  }
+
+  double _paneHeight(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final keyboard = mq.viewInsets.bottom > 80;
+    final frac = keyboard ? (_paneFrac < 0.3 ? _paneFrac : 0.3) : _paneFrac;
+    return (mq.size.height * frac).clamp(120.0, mq.size.height * 0.75);
   }
 
   int get _amount => parseAmount(_amountCtl.text) ?? 0;
@@ -247,7 +259,24 @@ class _EntryEditorPageState extends State<EntryEditorPage> {
       appBar: AppBar(
         title: Text(_isEdit ? 'ویرایش هزینه' : (widget.inboxItem != null ? 'ثبت هزینه از رسید' : 'هزینهٔ جدید')),
       ),
-      body: Form(
+      body: Column(
+        children: [
+          if (_attachments.isNotEmpty)
+            ReceiptPane(
+              items: [for (final d in _attachments) ReceiptPaneItem(id: d.id, label: d.label, bytes: d.full, thumb: d.thumb)],
+              height: _paneHeight(context),
+              onHeightChanged: (h) => setState(() => _paneFrac = (h / MediaQuery.of(context).size.height).clamp(0.18, 0.75)),
+              collapsed: _paneCollapsed,
+              onToggle: () => setState(() => _paneCollapsed = !_paneCollapsed),
+              onFullscreen: (item) async {
+                final bytes = item.bytes ?? await context.read<AppState>().getReceipt(item.id);
+                if (bytes != null && context.mounted) {
+                  Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ReceiptViewer(bytes: bytes, tag: 'pane-${item.id}', title: item.label)));
+                }
+              },
+            ),
+          Expanded(
+            child: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
@@ -496,6 +525,9 @@ class _EntryEditorPageState extends State<EntryEditorPage> {
             ),
           ],
         ),
+      ),
+          ),
+        ],
       ),
       bottomNavigationBar: SafeArea(
         child: Padding(

@@ -9,6 +9,7 @@ import '../../data/models.dart';
 import '../entries/entry_detail.dart';
 import '../entries/entry_editor.dart';
 import '../widgets/common.dart';
+import '../widgets/receipt_view.dart';
 
 class InboxPage extends StatefulWidget {
   const InboxPage({super.key});
@@ -66,7 +67,7 @@ class _InboxPageState extends State<InboxPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Text(
-              'عکس رسید را از گالری یا هر برنامه‌ای «Share ← تراز» کنید تا این‌جا بنشیند. هر وقت فرصت کردید، روی آن بزنید و هزینه‌اش را ثبت کنید.',
+              'عکس رسید را از گالری یا هر برنامه‌ای «Share ← تراز» کنید تا این‌جا بنشیند. رسیدها با کیفیت کامل نمایش داده می‌شوند؛ هنگام ثبت هزینه هم بالای فرم می‌مانند تا تاریخ و مبلغ را از رویشان بخوانید.',
               style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ),
@@ -78,11 +79,11 @@ class _InboxPageState extends State<InboxPage> {
                     subtitle: 'عکس رسیدها را از گالری Share کنید یا همین‌جا عکس بگیرید.',
                     action: FilledButton.icon(onPressed: () => _add(ImageSource.camera), icon: const Icon(Icons.photo_camera_outlined), label: const Text('عکس رسید')),
                   )
-                : GridView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 110),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 0.78),
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 140),
                     itemCount: items.length,
-                    itemBuilder: (context, i) => _InboxTile(item: items[i]),
+                    separatorBuilder: (_, __) => const SizedBox(height: 14),
+                    itemBuilder: (context, i) => _InboxCard(item: items[i]),
                   ),
           ),
         ],
@@ -110,8 +111,8 @@ class _InboxPageState extends State<InboxPage> {
   }
 }
 
-class _InboxTile extends StatelessWidget {
-  const _InboxTile({required this.item});
+class _InboxCard extends StatelessWidget {
+  const _InboxCard({required this.item});
   final InboxItem item;
 
   @override
@@ -119,92 +120,59 @@ class _InboxTile extends StatelessWidget {
     final s = context.read<AppState>();
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
+    final maxH = MediaQuery.of(context).size.height * 0.72;
     return Card(
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _openActions(context, s),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: item.thumb != null
-                  ? Image.memory(item.thumb!, fit: BoxFit.cover, gaplessPlayback: true)
-                  : Container(color: scheme.surfaceContainerHighest, child: const Icon(Icons.receipt_long_outlined, size: 40)),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(timeAgo(item.createdAt), style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ),
-                  if (item.pending) Icon(Icons.cloud_upload_outlined, size: 14, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 4),
-                  Icon(Icons.add_circle, size: 18, color: scheme.primary),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // تصویر با کیفیت کامل، تمام‌عرض (لمس = تمام‌صفحه با زوم)
+          FullReceiptImage(
+            receiptId: item.id,
+            thumb: item.thumb,
+            maxHeight: maxH,
+            fit: BoxFit.contain,
+            onTap: () async {
+              final bytes = await s.getReceipt(item.id);
+              if (bytes != null && context.mounted) {
+                Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ReceiptViewer(bytes: bytes, tag: 'inbox-${item.id}')));
+              }
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+            child: Row(
+              children: [
+                Icon(Icons.schedule, size: 14, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 4),
+                Text(timeAgo(item.createdAt), style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                if (item.pending) ...[
+                  const SizedBox(width: 8),
+                  Icon(Icons.cloud_upload_outlined, size: 14, color: scheme.onSurfaceVariant),
                 ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openActions(BuildContext context, AppState s) async {
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      useSafeArea: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (item.thumb != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 220),
-                    child: Image.memory(item.thumb!, fit: BoxFit.cover, width: double.infinity),
-                  ),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'حذف از صندوق',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(Icons.delete_outline, color: scheme.error),
+                  onPressed: () async {
+                    final ok = await confirmDialog(context, title: 'حذف رسید', message: 'این رسید از صندوق حذف شود؟');
+                    if (ok) await s.deleteInbox(item.id);
+                  },
                 ),
-              ),
-            ListTile(
-              leading: const Icon(Icons.add_task),
-              title: const Text('ثبت هزینه با این رسید'),
-              subtitle: const Text('فرم هزینه با همین رسید باز می‌شود'),
-              onTap: () => Navigator.pop(ctx, 'create'),
+                const SizedBox(width: 6),
+                FilledButton.icon(
+                  onPressed: () => EntryEditorPage.open(context, inboxItem: item),
+                  icon: const Icon(Icons.add_task, size: 18),
+                  label: const Text('ثبت هزینه'),
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 42), padding: const EdgeInsets.symmetric(horizontal: 14)),
+                ),
+              ],
             ),
-            ListTile(
-              leading: const Icon(Icons.zoom_in),
-              title: const Text('نمایش بزرگ'),
-              onTap: () => Navigator.pop(ctx, 'view'),
-            ),
-            ListTile(
-              leading: Icon(Icons.delete_outline, color: Theme.of(ctx).colorScheme.error),
-              title: Text('حذف از صندوق', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
-              onTap: () => Navigator.pop(ctx, 'delete'),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
+          ),
+        ],
       ),
     );
-    if (!context.mounted) return;
-    switch (action) {
-      case 'create':
-        await EntryEditorPage.open(context, inboxItem: item);
-      case 'view':
-        final bytes = await s.getReceipt(item.id);
-        if (bytes != null && context.mounted) {
-          Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ReceiptViewer(bytes: bytes, tag: 'inbox-${item.id}')));
-        } else if (context.mounted) {
-          toast(context, 'تصویر هنوز در دسترس نیست');
-        }
-      case 'delete':
-        final ok = await confirmDialog(context, title: 'حذف رسید', message: 'این رسید از صندوق حذف شود؟');
-        if (ok) await s.deleteInbox(item.id);
-    }
   }
 }
 

@@ -13,7 +13,7 @@ class ProcessedImage {
 }
 
 /// حداکثر حجم رسید کامل (بایت) — زیر سقف ۱ مگابایت Firestore.
-const maxReceiptBytes = 640 * 1024;
+const maxReceiptBytes = 820 * 1024;
 
 Future<ProcessedImage> processReceipt(Uint8List bytes) =>
     compute(_process, bytes);
@@ -23,20 +23,24 @@ ProcessedImage _process(Uint8List bytes) {
   if (im == null) throw const FormatException('فرمت عکس پشتیبانی نمی‌شود');
   im = img.bakeOrientation(im);
 
-  im = _fit(im, 1400);
-  var quality = 82;
+  im = _fit(im, 1700);
+  var quality = 84;
   var full = img.encodeJpg(im, quality: quality);
   while (full.length > maxReceiptBytes && quality > 40) {
     quality -= 10;
     full = img.encodeJpg(im, quality: quality);
   }
   if (full.length > maxReceiptBytes) {
+    im = _fit(im, 1300);
+    full = img.encodeJpg(im, quality: 62);
+  }
+  if (full.length > maxReceiptBytes) {
     im = _fit(im, 1000);
-    full = img.encodeJpg(im, quality: 60);
+    full = img.encodeJpg(im, quality: 58);
   }
 
-  final th = _fit(im, 192);
-  final thumb = img.encodeJpg(th, quality: 62);
+  final th = _fit(im, 256);
+  final thumb = img.encodeJpg(th, quality: 64);
   return ProcessedImage(
     Uint8List.fromList(full),
     Uint8List.fromList(thumb),

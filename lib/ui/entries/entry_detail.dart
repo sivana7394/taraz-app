@@ -12,6 +12,7 @@ import '../../core/theme.dart';
 import '../../data/app_state.dart';
 import '../../data/models.dart';
 import '../widgets/common.dart';
+import '../widgets/receipt_view.dart';
 import 'entry_editor.dart';
 
 class EntryDetailPage extends StatefulWidget {
@@ -234,41 +235,18 @@ class _AttachmentCardState extends State<_AttachmentCard> {
               ],
             ),
           ),
-          FutureBuilder<Uint8List?>(
-            future: _full,
-            builder: (context, snap) {
-              if (snap.connectionState != ConnectionState.done) {
-                return SizedBox(
-                  height: 220,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (a.thumb != null) Image.memory(a.thumb!, fit: BoxFit.cover),
-                      Container(color: Colors.black26),
-                      const Center(child: CircularProgressIndicator(color: Colors.white)),
-                    ],
-                  ),
-                );
-              }
-              final bytes = snap.data;
-              if (bytes == null) {
-                return const Padding(padding: EdgeInsets.all(16), child: Text('تصویر در دسترس نیست (شاید هنوز از دستگاه ثبت‌کننده ارسال نشده).'));
-              }
-              return GestureDetector(
-                onTap: () => _openViewer(context, bytes, a.id),
-                child: Hero(
-                  tag: 'receipt-${a.id}',
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 420),
-                    child: Image.memory(bytes, fit: BoxFit.cover, width: double.infinity, gaplessPlayback: true),
-                  ),
-                ),
-              );
+          FullReceiptImage(
+            receiptId: a.id,
+            thumb: a.thumb,
+            fit: BoxFit.fitWidth,
+            onTap: () async {
+              final bytes = await _full;
+              if (bytes != null && context.mounted) _openViewer(context, bytes, a.id);
             },
           ),
           Padding(
             padding: const EdgeInsets.all(8),
-            child: Center(child: Text('برای بزرگ‌نمایی روی تصویر بزنید', style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant))),
+            child: Center(child: Text('کیفیت کامل · برای زوم بیشتر روی تصویر بزنید', style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant))),
           ),
         ],
       ),
