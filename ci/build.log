@@ -131,5 +131,5 @@ Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
 Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
 
 Caught exception: Already watching path: /home/runner/work/taraz-app/taraz-app/android
-Running Gradle task 'assembleRelease'...                          383.3s
+Running Gradle task 'assembleRelease'...                          379.8s
 ✓ Built build/app/outputs/flutter-apk/app-release.apk (64.3MB)
