@@ -1,4 +1,4 @@
-.github/workflows/build.yml name: Build APK
+name: Build APK
 
 on:
   push:
@@ -126,8 +126,8 @@ jobs:
           git config user.name "taraz-ci"
           git config user.email "ci@users.noreply.github.com"
           # فایل‌هایی که نباید در مخزن باشند (مثلاً یادداشت رمز) حذف می‌شوند
-          git rm -q --cached --ignore-unmatch -- "رمز-امضا-keystore.txt" "رمزها" 2>/dev/null || true
-          rm -rf -- "رمز-امضا-keystore.txt" "رمزها" 2>/dev/null || true
+          git rm -q --cached --ignore-unmatch -- "رمز-امضا-keystore.txt" "رمزها" build.yml .gitkeep 2>/dev/null || true
+          rm -rf -- "رمز-امضا-keystore.txt" "رمزها" build.yml .gitkeep 2>/dev/null || true
           git add -A ci keystore 2>/dev/null || git add -A ci
           if git diff --cached --quiet; then
             echo "nothing to commit"
