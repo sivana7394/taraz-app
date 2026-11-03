@@ -102,7 +102,7 @@ If no such version exists, report the issue to the plugin. If necessary, here is
 an issue against a plugin: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers#report-incompatible-kotlin-gradle-plugin-usage-to-plugin-authors
 
 If you are a plugin author, please migrate your plugin to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
-Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 14032 bytes (99.1% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 14200 bytes (99.1% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
 Checking the license for package CMake 3.22.1 in /usr/local/lib/android/sdk/licenses
 License for package CMake 3.22.1 accepted.
 Preparing "Install CMake 3.22.1 v.3.22.1".
@@ -122,14 +122,14 @@ Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
 
 Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
 
-Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
-
-Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
-
-Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
-
 Note: /home/runner/.pub-cache/hosted/pub.dev/cloud_firestore-7.1.0/android/src/main/java/io/flutter/plugins/firebase/firestore/utils/PipelineStageHandlers.java uses unchecked or unsafe operations.
 Note: Recompile with -Xlint:unchecked for details.
+Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
+
+Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
+
+Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
+
 Caught exception: Already watching path: /home/runner/work/taraz-app/taraz-app/android
-Running Gradle task 'assembleRelease'...                          348.8s
-✓ Built build/app/outputs/flutter-apk/app-release.apk (64.5MB)
+Running Gradle task 'assembleRelease'...                          307.7s
+✓ Built build/app/outputs/flutter-apk/app-release.apk (64.6MB)
